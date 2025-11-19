@@ -1,7 +1,53 @@
+@import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #f8fafc; /* Slate-50 */
+body, html, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  background-color: #f8fafc;
+  overflow: hidden;
+}
+
+/* --- PDF HIGHLIGHTER FIXES --- */
+.PdfHighlighter {
+  height: 100% !important;
+  width: 100% !important;
+  position: relative !important;
+  overflow: auto !important;
+}
+
+.pdfViewer {
+  position: absolute !important; 
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.textLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.2;
+  line-height: 1.0;
+  transform-origin: 0% 0%;
+}
+
+.textLayer > span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.page {
+  margin: 10px auto !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 }
