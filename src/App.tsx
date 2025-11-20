@@ -8,6 +8,7 @@ import { BookOpen, Trash2, Plus, LogOut, ExternalLink, Loader2, Pencil, X, Save,
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
 import * as pdfjsLib from 'pdfjs-dist';
+import 'pdfjs-dist/web/pdf_viewer.css'; // <--- FIXED: Import standard PDF.js styles
 
 // --- CONFIGURATION ---
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
@@ -282,12 +283,16 @@ function App() {
         textLayerRef.current.style.width = `${viewport.width}px`;
         textLayerRef.current.style.height = `${viewport.height}px`;
         
-        pdfjsLib.renderTextLayer({
+        // FIXED: Set the scale factor for PDF.js text layer alignment
+        textLayerRef.current.style.setProperty('--scale-factor', scale.toString());
+
+        // FIXED: renderTextLayer returns a promise in modern versions
+        await pdfjsLib.renderTextLayer({
           textContentSource: textContent,
           container: textLayerRef.current,
           viewport: viewport,
           textDivs: []
-        });
+        }).promise;
       }
     };
     
