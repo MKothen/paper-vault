@@ -15,21 +15,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const APP_PASSWORD = "science-rocks";
 
+// Updated Neo-Brutalist Palette
 const COLORS = [
-  { name: 'Yellow', class: 'bg-yellow-200 text-yellow-900 border-yellow-300', hex: '#fef08a' },
-  { name: 'Blue', class: 'bg-cyan-200 text-cyan-900 border-cyan-300', hex: '#a5f3fc' },
-  { name: 'Pink', class: 'bg-pink-200 text-pink-900 border-pink-300', hex: '#fbcfe8' },
-  { name: 'Green', class: 'bg-lime-200 text-lime-900 border-lime-300', hex: '#d9f99d' },
-  { name: 'Purple', class: 'bg-purple-200 text-purple-900 border-purple-300', hex: '#e9d5ff' },
-  { name: 'Orange', class: 'bg-orange-200 text-orange-900 border-orange-300', hex: '#fed7aa' },
+  { name: 'Yellow', class: 'bg-nb-yellow', hex: '#FFD90F', border: 'border-black' },
+  { name: 'Blue', class: 'bg-nb-cyan', hex: '#22d3ee', border: 'border-black' },
+  { name: 'Pink', class: 'bg-nb-pink', hex: '#FF90E8', border: 'border-black' },
+  { name: 'Green', class: 'bg-nb-lime', hex: '#a3e635', border: 'border-black' },
+  { name: 'Purple', class: 'bg-nb-purple', hex: '#c084fc', border: 'border-black' },
+  { name: 'Orange', class: 'bg-nb-orange', hex: '#fb923c', border: 'border-black' },
 ];
 
 const HIGHLIGHT_COLORS = [
-  { name: 'Yellow', hex: '#fef08a', alpha: 'rgba(254, 240, 138, 0.4)' },
-  { name: 'Green', hex: '#d9f99d', alpha: 'rgba(217, 249, 157, 0.4)' },
-  { name: 'Blue', hex: '#a5f3fc', alpha: 'rgba(165, 243, 252, 0.4)' },
-  { name: 'Pink', hex: '#fbcfe8', alpha: 'rgba(251, 207, 232, 0.4)' },
-  { name: 'Orange', hex: '#fed7aa', alpha: 'rgba(254, 215, 170, 0.4)' },
+  { name: 'Yellow', hex: '#FFD90F', alpha: 'rgba(255, 217, 15, 0.5)' },
+  { name: 'Green', hex: '#a3e635', alpha: 'rgba(163, 230, 53, 0.5)' },
+  { name: 'Blue', hex: '#22d3ee', alpha: 'rgba(34, 211, 238, 0.5)' },
+  { name: 'Pink', hex: '#FF90E8', alpha: 'rgba(255, 144, 232, 0.5)' },
+  { name: 'Orange', hex: '#fb923c', alpha: 'rgba(251, 146, 60, 0.5)' },
 ];
 
 const NOTE_TEMPLATES = [
@@ -101,7 +102,6 @@ const generateSmartTags = (title, abstract) => {
 };
 
 function App() {
-  // ============ ALL HOOKS MUST BE AT THE TOP (React Rules of Hooks) ============
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [user, loading] = useAuthState(auth);
@@ -131,7 +131,7 @@ function App() {
   const canvasRef = useRef(null);
   const textLayerRef = useRef(null);
   
-  // ENHANCED: Annotation state
+  // Annotation state
   const [highlights, setHighlights] = useState([]);
   const [postits, setPostits] = useState([]);
   const [selectedColor, setSelectedColor] = useState(HIGHLIGHT_COLORS[0]);
@@ -139,7 +139,7 @@ function App() {
   const [annotationHistory, setAnnotationHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   
-  // ENHANCED: New features
+  // New features
   const [highlightOpacity, setHighlightOpacity] = useState(0.4);
   const [darkMode, setDarkMode] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -153,8 +153,6 @@ function App() {
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
   const pomodoroRef = useRef(null);
   
-  // ============ 2. EFFECTS & CALLBACKS (STILL NO RETURNS YET) ============
-
   // Load papers from Firestore
   useEffect(() => {
     if (!user) return;
@@ -268,8 +266,9 @@ function App() {
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       
+      // Brutalist Dark Mode: High Contrast Invert
       if (darkMode) {
-        context.filter = 'invert(1) hue-rotate(180deg)';
+        context.filter = 'invert(1) grayscale(1) contrast(1.5)';
       } else {
         context.filter = 'none';
       }
@@ -495,6 +494,7 @@ function App() {
         venue: "",
         tags: smartTags,
         status: "to-read",
+        color: COLORS[0].class,
         pdfUrl,
         uploadedAt: Date.now()
       });
@@ -518,7 +518,7 @@ function App() {
   };
 
   const deletePaper = async (id) => {
-    if (confirm("Delete this paper?")) {
+    if (confirm("BURN THIS PAPER? 🔥")) {
       await deleteDoc(doc(db, "papers", id));
     }
   };
@@ -542,31 +542,28 @@ function App() {
     setEditingPaper(null);
   };
 
-  // ============ 3. CONDITIONAL RETURNS (UI) ============
-
-  // Gatekeeper UI
+  // --- RENDER: Auth Gate ---
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-          <div className="flex items-center gap-3 mb-6">
-            <Lock className="w-8 h-8 text-purple-600" />
-            <h1 className="text-3xl font-bold text-gray-800">Paper Vault</h1>
+      <div className="min-h-screen bg-nb-yellow flex items-center justify-center p-4">
+        <div className="nb-card w-full max-w-md p-8 text-center">
+          <div className="flex justify-center mb-6">
+            <Lock className="w-12 h-12" strokeWidth={3} />
           </div>
-          <p className="text-gray-600 mb-6">Enter password to access your research library</p>
+          <h1 className="text-4xl font-black uppercase mb-6">Restricted Area</h1>
           <input
             type="password"
             value={passwordInput}
             onChange={(e) => setPasswordInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && passwordInput === APP_PASSWORD && setIsAuthorized(true)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            placeholder="Enter password"
+            className="nb-input mb-4 text-center text-xl placeholder-black/50"
+            placeholder="ENTER PASSWORD"
           />
           <button
             onClick={() => passwordInput === APP_PASSWORD && setIsAuthorized(true)}
-            className="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+            className="nb-button w-full bg-black text-white hover:bg-gray-800"
           >
-            Unlock
+            UNLOCK VAULT
           </button>
         </div>
       </div>
@@ -575,100 +572,95 @@ function App() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <Loader2 className="animate-spin text-indigo-600" size={40} />
+      <div className="h-screen flex items-center justify-center bg-nb-gray">
+        <Loader2 className="animate-spin w-16 h-16" strokeWidth={3} />
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 via-purple-50 to-pink-100">
-        <div className="bg-white p-10 rounded-2xl shadow-2xl max-w-md w-full text-center space-y-6">
-          <div className="flex justify-center">
-            <BookOpen className="text-indigo-600" size={60} />
+      <div className="h-screen flex items-center justify-center bg-nb-cyan p-4">
+        <div className="nb-card max-w-md w-full p-10 text-center">
+          <div className="flex justify-center mb-6">
+            <BookOpen className="w-20 h-20" strokeWidth={3} />
           </div>
-          <h1 className="text-4xl font-bold text-gray-800">Paper Vault</h1>
-          <p className="text-gray-600">Your personal research library</p>
+          <h1 className="text-5xl font-black uppercase mb-2">Paper Vault</h1>
+          <p className="text-xl font-bold mb-8 border-b-3 border-black inline-block pb-1">RESEARCH / DESTROY</p>
           <button
             onClick={signInWithGoogle}
-            className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center justify-center gap-3"
+            className="nb-button w-full bg-nb-pink flex items-center justify-center gap-3 text-lg"
           >
-            <User size={20} />
-            Sign in with Google
+            <User className="w-6 h-6" strokeWidth={3} />
+            ENTER WITH GOOGLE
           </button>
         </div>
       </div>
     );
   }
 
-  // ============ 4. MAIN UI (READER, GRAPH, BOARD) ============
-
+  // --- RENDER: PDF Reader ---
   if (activeView === 'reader' && selectedPaper) {
     const currentHighlights = highlights.filter(h => h.page === currentPage);
     const currentPostits = postits.filter(p => p.page === currentPage);
     const annotationCount = highlights.length + postits.length;
 
     return (
-      <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-gray-50'}`}>
-        {/* Top toolbar */}
-        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 flex items-center justify-between`}>
+      <div className={`h-screen flex flex-col ${darkMode ? 'bg-black text-white' : 'bg-nb-gray text-black'}`}>
+        {/* Top Toolbar */}
+        <div className={`${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-black'} border-b-3 p-3 flex items-center justify-between z-20`}>
           <div className="flex items-center gap-4">
-            <button onClick={() => setActiveView('library')} className={`${darkMode ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>
-              <ChevronLeft className="w-5 h-5" />
+            <button onClick={() => setActiveView('library')} className="nb-button px-3 py-1 flex items-center gap-2">
+              <ChevronLeft strokeWidth={3} /> BACK
             </button>
-            <h2 className={`font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'} truncate max-w-md`}>{selectedPaper.title}</h2>
+            <h2 className="font-bold text-xl truncate max-w-md uppercase">{selectedPaper.title}</h2>
           </div>
           
           <div className="flex items-center gap-2">
-            <button onClick={undo} disabled={historyIndex < 0} className={`p-2 rounded ${historyIndex < 0 ? 'opacity-50' : 'hover:bg-gray-100'}`} title="Undo">
-              <Undo2 className="w-5 h-5" />
+            <button onClick={undo} disabled={historyIndex < 0} className={`nb-button px-2 ${historyIndex < 0 ? 'opacity-50' : ''}`} title="Undo">
+              <Undo2 className="w-5 h-5" strokeWidth={3} />
             </button>
-            <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded hover:bg-gray-100">
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            <button onClick={() => setDarkMode(!darkMode)} className="nb-button px-2">
+              {darkMode ? <Sun className="w-5 h-5" strokeWidth={3} /> : <Moon className="w-5 h-5" strokeWidth={3} />}
             </button>
-            <button onClick={() => setShowCitationModal(true)} className="p-2 rounded hover:bg-gray-100" title="Citation">
-              <Clipboard className="w-5 h-5" />
+            <button onClick={() => setShowCitationModal(true)} className="nb-button px-2" title="Citation">
+              <Clipboard className="w-5 h-5" strokeWidth={3} />
             </button>
-            <button onClick={() => setShowSidebar(!showSidebar)} className="p-2 rounded hover:bg-gray-100">
-              <SidebarIcon className="w-5 h-5" />
+            <button onClick={() => setShowSidebar(!showSidebar)} className="nb-button px-2">
+              <SidebarIcon className="w-5 h-5" strokeWidth={3} />
             </button>
-            <div className="flex items-center gap-2 border-l pl-2">
-              <Timer className="w-4 h-4" />
-              <span className="text-sm font-mono">{Math.floor(pomodoroTime / 60)}:{String(pomodoroTime % 60).padStart(2, '0')}</span>
-              <button onClick={() => setPomodoroRunning(!pomodoroRunning)} className={`px-2 py-1 text-xs rounded ${pomodoroRunning ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                {pomodoroRunning ? 'Pause' : 'Start'}
+            
+            {/* Pomodoro */}
+            <div className="flex items-center gap-2 border-l-3 border-black pl-4 ml-2">
+              <Timer className="w-5 h-5" strokeWidth={3} />
+              <span className="font-mono font-bold text-lg">{Math.floor(pomodoroTime / 60)}:{String(pomodoroTime % 60).padStart(2, '0')}</span>
+              <button onClick={() => setPomodoroRunning(!pomodoroRunning)} className={`nb-button px-2 py-1 text-xs ${pomodoroRunning ? 'bg-nb-orange' : 'bg-nb-lime'}`}>
+                {pomodoroRunning ? 'PAUSE' : 'START'}
               </button>
             </div>
           </div>
         </div>
         
-        {/* Annotation toolbar */}
-        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-2 flex items-center gap-4 flex-wrap`}>
-          <div className="flex items-center gap-2">
-            <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Highlight:</span>
+        {/* Annotation Toolbar */}
+        <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} border-b-3 border-black p-2 flex items-center gap-4 overflow-x-auto z-10`}>
+          <div className="flex items-center gap-2 border-r-3 border-black pr-4">
+            <span className="font-bold text-sm uppercase">Ink:</span>
             {HIGHLIGHT_COLORS.map(color => (
               <button
                 key={color.name}
                 onClick={() => setSelectedColor(color)}
-                className={`w-8 h-8 rounded border-2 ${selectedColor.name === color.name ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
+                className={`w-8 h-8 border-3 border-black ${selectedColor.name === color.name ? 'ring-4 ring-black ring-offset-1' : ''}`}
                 style={{ backgroundColor: color.hex }}
                 title={color.name}
               />
             ))}
           </div>
           
-          <div className="flex items-center gap-2 border-l pl-4">
-            <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Opacity:</span>
-            <input type="range" min="0.1" max="0.8" step="0.1" value={highlightOpacity} onChange={(e) => setHighlightOpacity(parseFloat(e.target.value))} className="w-24" />
-            <span className="text-sm">{Math.round(highlightOpacity * 100)}%</span>
-          </div>
-          
           {selectedText && (
-            <div className="flex items-center gap-2 border-l pl-4">
-              <span className="text-sm text-purple-600 font-medium">Text selected</span>
+            <div className="flex items-center gap-2 border-r-3 border-black pr-4 animate-pulse">
+              <span className="font-bold text-sm text-nb-purple uppercase">Text Selected!</span>
               {NOTE_TEMPLATES.map(template => (
-                <button key={template.label} onClick={() => addNoteFromSelection(template.prefix)} className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200">
+                <button key={template.label} onClick={() => addNoteFromSelection(template.prefix)} className="nb-button text-xs py-1 px-2 bg-nb-yellow">
                   {template.label}
                 </button>
               ))}
@@ -676,168 +668,150 @@ function App() {
           )}
           
           <div className="ml-auto flex items-center gap-2">
-            <input type="text" value={searchInPdf} onChange={(e) => setSearchInPdf(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchInPdfText(searchInPdf)} placeholder="Search in PDF..." className={`px-3 py-1 text-sm rounded border ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`} />
-            <button onClick={() => searchInPdfText(searchInPdf)} className="p-1 rounded hover:bg-gray-100">
-              <Search className="w-4 h-4" />
+            <input 
+              type="text" 
+              value={searchInPdf} 
+              onChange={(e) => setSearchInPdf(e.target.value)} 
+              onKeyDown={(e) => e.key === 'Enter' && searchInPdfText(searchInPdf)} 
+              placeholder="FIND IN PDF..." 
+              className="nb-input py-1 text-sm w-48" 
+            />
+            <button onClick={() => searchInPdfText(searchInPdf)} className="nb-button px-2 py-1 bg-nb-cyan">
+              <Search className="w-4 h-4" strokeWidth={3} />
             </button>
           </div>
         </div>
         
-        {/* Main content */}
+        {/* Main Content Area */}
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 overflow-auto flex flex-col items-center p-4">
-            <div className="w-full max-w-4xl mb-4">
-              <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                <span>Progress: {Math.round((currentPage / numPages) * 100)}%</span>
-                <span>Reading time: {Math.floor(totalReadingTime / 60)}m {totalReadingTime % 60}s</span>
+          <div className="flex-1 overflow-auto flex flex-col items-center p-8 bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:20px_20px]">
+            
+            {/* Reading Progress Bar */}
+            <div className="w-full max-w-4xl mb-6 bg-white border-3 border-black p-2 shadow-nb">
+              <div className="flex justify-between text-xs font-bold uppercase mb-1">
+                <span>Reading Progress: {Math.round((currentPage / numPages) * 100)}%</span>
+                <span>Time: {Math.floor(totalReadingTime / 60)}m</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-purple-600 h-2 rounded-full transition-all" style={{ width: `${(currentPage / numPages) * 100}%` }} />
+              <div className="w-full bg-gray-200 h-4 border-2 border-black">
+                <div className="bg-nb-lime h-full border-r-2 border-black transition-all" style={{ width: `${(currentPage / numPages) * 100}%` }} />
               </div>
             </div>
             
-            <div className="relative">
-              <canvas ref={canvasRef} className="shadow-2xl" />
-              <div ref={textLayerRef} className="textLayer absolute top-0 left-0" onMouseUp={handleTextSelection} onDoubleClick={handleDoubleClick} style={{ mixBlendMode: 'multiply' }} />
-              {/* Highlights */}
+            {/* PDF Canvas Container */}
+            <div className="relative border-3 border-black shadow-nb-xl bg-white">
+              <canvas ref={canvasRef} />
+              <div ref={textLayerRef} className="textLayer absolute top-0 left-0" onMouseUp={handleTextSelection} onDoubleClick={handleDoubleClick} />
+              
+              {/* Highlights Overlay */}
               {currentHighlights.map(h => (
                 <div key={h.id} style={{ position: 'absolute', left: h.x, top: h.y, width: h.width, height: h.height, backgroundColor: h.color.replace('0.4', highlightOpacity), pointerEvents: 'none', mixBlendMode: 'multiply' }} />
               ))}
-              {/* Post-its */}
+              
+              {/* Sticky Notes Overlay */}
               {currentPostits.map(p => (
-                <div key={p.id} className={`absolute ${p.color.class} p-3 rounded-lg shadow-lg cursor-move text-sm max-w-xs border-2`} style={{ left: p.x, top: p.y }}>
-                  <button onClick={() => { const filtered = postits.filter(item => item.id !== p.id); setPostits(filtered); saveAnnotations(highlights, filtered); }} className="absolute top-1 right-1 text-gray-500 hover:text-gray-700">
-                    <X className="w-3 h-3" />
+                <div key={p.id} className={`absolute w-48 nb-postit ${p.color.class || 'bg-nb-yellow'} z-30`} style={{ left: p.x, top: p.y }}>
+                  <button onClick={() => { const filtered = postits.filter(item => item.id !== p.id); setPostits(filtered); saveAnnotations(highlights, filtered); }} className="absolute top-1 right-1 hover:text-red-600">
+                    <X className="w-4 h-4" strokeWidth={3} />
                   </button>
-                  {p.text}
+                  <p className="font-mono text-sm leading-tight mt-2">{p.text}</p>
                 </div>
               ))}
             </div>
           </div>
           
           {/* Sidebar */}
-          <div className={`${showSidebar ? 'w-80' : 'w-0'} overflow-hidden transition-all duration-300 bg-white border-l border-gray-200 flex flex-col`}>
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-800">Annotations ({annotationCount})</h3>
-              <button onClick={() => setShowSidebar(false)} className="text-gray-500 hover:text-gray-700"><X className="w-5 h-5" /></button>
+          <div className={`${showSidebar ? 'w-96' : 'w-0'} overflow-hidden transition-all duration-300 bg-white border-l-3 border-black flex flex-col z-20`}>
+            <div className="p-4 border-b-3 border-black bg-nb-yellow flex justify-between items-center">
+              <h3 className="font-black text-xl uppercase">Annotations ({annotationCount})</h3>
+              <button onClick={() => setShowSidebar(false)}><X className="w-6 h-6" strokeWidth={3} /></button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Page Highlights */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Highlights on Page {currentPage}</h4>
+                <h4 className="font-bold border-b-2 border-black mb-2 uppercase">Page {currentPage} Highlights</h4>
                 {currentHighlights.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">No highlights on this page</p>
+                  <p className="text-gray-500 italic text-sm">No highlights here yet.</p>
                 ) : (
                   <div className="space-y-2">
-                    {currentHighlights.map(h => {
-                      const colorName = HIGHLIGHT_COLORS.find(c => c.alpha === h.color)?.name;
-                      return (
-                        <div key={h.id} className="text-sm border-l-4 pl-2 py-1" style={{ borderColor: h.color }}>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-gray-500">{colorName}</span>
-                            <button onClick={() => { const filtered = highlights.filter(item => item.id !== h.id); setHighlights(filtered); saveAnnotations(filtered, postits); }} className="ml-auto text-red-500 hover:text-red-700">
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <p className="text-gray-700">"{h.text}"</p>
+                    {currentHighlights.map(h => (
+                      <div key={h.id} className="nb-card p-2 text-sm border-l-8" style={{ borderLeftColor: h.color.replace('0.4', '1') }}>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-xs font-bold uppercase text-gray-500">Highlight</span>
+                          <button onClick={() => { const filtered = highlights.filter(item => item.id !== h.id); setHighlights(filtered); saveAnnotations(filtered, postits); }} className="text-red-500">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Notes on Page {currentPage}</h4>
-                {currentPostits.length === 0 ? (
-                  <p className="text-sm text-gray-500 italic">No notes on this page</p>
-                ) : (
-                  <div className="space-y-2">
-                    {currentPostits.map(p => (
-                      <div key={p.id} className={`${p.color.class} p-2 rounded border-2 text-sm`}>
-                        <button onClick={() => { const filtered = postits.filter(item => item.id !== p.id); setPostits(filtered); saveAnnotations(highlights, filtered); }} className="float-right text-red-500 hover:text-red-700">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                        <p>{p.text}</p>
+                        <p>"{h.text}"</p>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
-              
+
+              {/* Page Notes */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">All Annotations</h4>
-                <div className="space-y-1">
-                  {Array.from(new Set([...highlights.map(h => h.page), ...postits.map(p => p.page)])).sort((a, b) => a - b).map(pageNum => {
-                    const pageHighlights = highlights.filter(h => h.page === pageNum).length;
-                    const pageNotes = postits.filter(p => p.page === pageNum).length;
-                    return (
-                      <button key={pageNum} onClick={() => setCurrentPage(pageNum)} className={`w-full text-left px-2 py-1 rounded text-sm ${pageNum === currentPage ? 'bg-purple-100 text-purple-700' : 'hover:bg-gray-100'}`}>
-                        Page {pageNum}: {pageHighlights} highlights, {pageNotes} notes
-                      </button>
-                    );
-                  })}
-                </div>
+                <h4 className="font-bold border-b-2 border-black mb-2 uppercase">Page {currentPage} Stickies</h4>
+                {currentPostits.length === 0 ? (
+                  <p className="text-gray-500 italic text-sm">No sticky notes.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {currentPostits.map(p => (
+                      <div key={p.id} className={`nb-card p-3 ${p.color.class || 'bg-nb-yellow'} rotate-1`}>
+                         <div className="flex justify-end">
+                            <button onClick={() => { const filtered = postits.filter(item => item.id !== p.id); setPostits(filtered); saveAnnotations(highlights, filtered); }}><Trash2 className="w-3 h-3"/></button>
+                         </div>
+                         <p className="font-mono text-sm">{p.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-              <div className="pt-4 border-t border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Bulk Actions</h4>
-                <div className="space-y-2">
-                  {HIGHLIGHT_COLORS.map(color => {
-                    const count = highlights.filter(h => h.color === color.alpha).length;
-                    return count > 0 ? (
-                      <button key={color.name} onClick={() => { if (confirm(`Delete all ${count} ${color.name} highlights?`)) bulkDeleteHighlights(color.alpha); }} className="w-full text-left px-2 py-1 rounded text-sm hover:bg-red-50 text-red-600">
-                        Delete all {color.name} ({count})
-                      </button>
-                    ) : null;
-                  })}
-                </div>
+
+              <div className="border-t-3 border-black pt-4">
+                 <button onClick={exportAnnotations} className="nb-button w-full bg-nb-cyan flex items-center justify-center gap-2">
+                   <Download className="w-4 h-4" strokeWidth={3} /> EXPORT NOTES
+                 </button>
               </div>
-            </div>
-            
-            <div className="p-4 border-t border-gray-200">
-              <button onClick={exportAnnotations} className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2">
-                <Download className="w-4 h-4" />
-                Export Annotations
-              </button>
             </div>
           </div>
         </div>
         
-        {/* Bottom controls */}
-        <div className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-4 py-3 flex items-center justify-between`}>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setScale(s => Math.max(0.5, s - 0.25))} className="p-2 rounded hover:bg-gray-100"><ZoomOut className="w-5 h-5" /></button>
-            <span className="text-sm px-2">{Math.round(scale * 100)}%</span>
-            <button onClick={() => setScale(s => Math.min(3, s + 0.25))} className="p-2 rounded hover:bg-gray-100"><ZoomIn className="w-5 h-5" /></button>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 rounded hover:bg-gray-100 disabled:opacity-50"><ChevronLeft className="w-5 h-5" /></button>
-            <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Page {currentPage} of {numPages}</span>
-            <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage === numPages} className="p-2 rounded hover:bg-gray-100 disabled:opacity-50"><ChevronRight className="w-5 h-5" /></button>
-          </div>
-          
-          <div className="w-32" />
+        {/* Bottom Navigation */}
+        <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} border-t-3 border-black p-3 flex justify-between items-center z-20`}>
+           <div className="flex items-center gap-2">
+             <button onClick={() => setScale(s => Math.max(0.5, s - 0.25))} className="nb-button px-2"><ZoomOut/></button>
+             <span className="font-bold font-mono w-16 text-center">{Math.round(scale * 100)}%</span>
+             <button onClick={() => setScale(s => Math.min(3, s + 0.25))} className="nb-button px-2"><ZoomIn/></button>
+           </div>
+           
+           <div className="flex items-center gap-4">
+             <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="nb-button px-4 disabled:opacity-50">PREV</button>
+             <span className="font-bold text-lg">PAGE {currentPage} / {numPages}</span>
+             <button onClick={() => setCurrentPage(p => Math.min(numPages, p + 1))} disabled={currentPage === numPages} className="nb-button px-4 disabled:opacity-50">NEXT</button>
+           </div>
+           <div className="w-32"></div>
         </div>
-        
+
         {/* Citation Modal */}
         {showCitationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Generate Citation</h3>
-                <button onClick={() => setShowCitationModal(false)} className="text-gray-500 hover:text-gray-700"><X className="w-5 h-5" /></button>
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+            <div className="nb-card w-full max-w-2xl p-6">
+              <div className="flex justify-between items-center mb-4 border-b-3 border-black pb-2">
+                <h3 className="text-2xl font-black uppercase">Cite This Paper</h3>
+                <button onClick={() => setShowCitationModal(false)}><X className="w-8 h-8" strokeWidth={3}/></button>
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Format</label>
-                <select value={citationFormat} onChange={(e) => setCitationFormat(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                  {Object.keys(CITATION_FORMATS).map(format => (<option key={format} value={format}>{format}</option>))}
+                <label className="font-bold block mb-2 uppercase">Format</label>
+                <select value={citationFormat} onChange={(e) => setCitationFormat(e.target.value)} className="nb-input">
+                  {Object.keys(CITATION_FORMATS).map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg mb-4 font-mono text-sm whitespace-pre-wrap">{CITATION_FORMATS[citationFormat](selectedPaper)}</div>
-              <button onClick={() => { copyCitation(); setShowCitationModal(false); }} className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2">
-                <Copy className="w-4 h-4" />Copy to Clipboard
+              <div className="bg-nb-gray border-3 border-black p-4 font-mono text-sm mb-4 whitespace-pre-wrap">
+                {CITATION_FORMATS[citationFormat](selectedPaper)}
+              </div>
+              <button onClick={copyCitation} className="nb-button w-full bg-nb-lime flex justify-center gap-2">
+                <Copy className="w-4 h-4" strokeWidth={3} /> COPY TO CLIPBOARD
               </button>
             </div>
           </div>
@@ -846,28 +820,23 @@ function App() {
     );
   }
 
-  // Graph View
+  // --- RENDER: Graph View ---
   if (activeView === 'graph') {
     return (
-      <div className="h-screen flex flex-col bg-gray-50">
-        <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
+      <div className="h-screen flex flex-col bg-nb-gray">
+        <div className="bg-white border-b-3 border-black p-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <button onClick={() => setActiveView('library')} className="text-gray-600 hover:text-gray-900">
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-800">Knowledge Graph</h1>
+            <button onClick={() => setActiveView('library')} className="nb-button px-3"><ChevronLeft strokeWidth={3}/></button>
+            <h1 className="text-2xl font-black uppercase">Knowledge Graph</h1>
           </div>
-          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900">
-            <LogOut size={20} />
-            Logout
-          </button>
+          <button onClick={logout} className="nb-button bg-nb-orange"><LogOut strokeWidth={3}/></button>
         </div>
-        <div className="flex-1 bg-gray-900">
+        <div className="flex-1 relative bg-black border-3 border-black m-4 shadow-nb-xl overflow-hidden">
           {graphData.links.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-white text-center p-8">
-              <div>
+            <div className="absolute inset-0 flex items-center justify-center text-white">
+              <div className="text-center">
                 <Wand2 className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p className="text-xl">Add more papers with shared tags to see connections!</p>
+                <p className="text-xl font-bold uppercase">Add papers with shared tags to connect dots!</p>
               </div>
             </div>
           ) : (
@@ -877,7 +846,20 @@ function App() {
               nodeAutoColorBy="id"
               linkWidth={link => link.value}
               linkDirectionalParticles={2}
-              backgroundColor="#111827"
+              backgroundColor="#000000"
+              nodeCanvasObject={(node, ctx, globalScale) => {
+                 const label = node.label;
+                 const fontSize = 12/globalScale;
+                 ctx.font = `${fontSize}px Sans-Serif`;
+                 const textWidth = ctx.measureText(label).width;
+                 const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
+                 ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                 ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions);
+                 ctx.textAlign = 'center';
+                 ctx.textBaseline = 'middle';
+                 ctx.fillStyle = node.color;
+                 ctx.fillText(label, node.x, node.y);
+              }}
             />
           )}
         </div>
@@ -885,131 +867,138 @@ function App() {
     );
   }
 
-  // Library View (Kanban)
+  // --- RENDER: Library (Kanban) ---
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Top Bar */}
-      <div className="bg-white border-b px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <BookOpen className="text-indigo-600" size={32} />
-          <h1 className="text-2xl font-bold text-gray-800">Paper Vault</h1>
-        </div>
-        
+    <div className="h-screen flex flex-col bg-nb-gray">
+      {/* Header */}
+      <div className="bg-white border-b-3 border-black p-4 flex justify-between items-center z-10">
         <div className="flex items-center gap-3">
-          <button onClick={() => setActiveView('graph')} className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors">
-            <Share2 size={18} />
-            Graph
-          </button>
-          <button onClick={logout} className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900">
-            <LogOut size={20} />
-            Logout
-          </button>
+          <div className="bg-black text-white p-2 border-2 border-black"><BookOpen strokeWidth={3} /></div>
+          <h1 className="text-3xl font-black tracking-tighter uppercase">Paper Vault</h1>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={() => setActiveView('graph')} className="nb-button bg-nb-purple flex gap-2"><Share2 strokeWidth={3} size={18}/> GRAPH</button>
+          <button onClick={logout} className="nb-button bg-nb-orange flex gap-2"><LogOut strokeWidth={3} size={18}/> EXIT</button>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="bg-white border-b px-6 py-3 flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-2 flex-1">
-          <Search size={18} className="text-gray-400" />
-          <input
-            type="text"
+      <div className="bg-white border-b-3 border-black p-4 flex gap-4 items-center flex-wrap z-10">
+        <div className="flex-1 relative min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={3} />
+          <input 
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search papers..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="SEARCH DATABASE..."
+            className="nb-input pl-10 font-bold uppercase placeholder-gray-500"
           />
         </div>
         
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
+        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="nb-input w-40 uppercase">
           <option value="all">All Status</option>
           <option value="to-read">To Read</option>
           <option value="reading">Reading</option>
           <option value="read">Read</option>
         </select>
-        
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg">
-          <option value="date">Sort by Date</option>
-          <option value="title">Sort by Title</option>
-          <option value="author">Sort by Author</option>
+
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="nb-input w-40 uppercase">
+          <option value="date">Newest</option>
+          <option value="title">Title</option>
+          <option value="author">Author</option>
         </select>
         
-        <input ref={fileInputRef} type="file" accept=".pdf" onChange={(e) => e.target.files[0] && handleFileUpload(e.target.files[0])} className="hidden" />
-        <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50">
-          {isUploading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
-          Upload PDF
+        <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={e => e.target.files[0] && handleFileUpload(e.target.files[0])} />
+        <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="nb-button bg-nb-lime flex items-center gap-2">
+          {isUploading ? <Loader2 className="animate-spin"/> : <Plus strokeWidth={3} />} UPLOAD PDF
         </button>
       </div>
 
-      {/* Recent Papers */}
+      {/* Recent Papers Strip */}
       {recentPapers.length > 0 && (
-        <div className="px-6 py-4 bg-gray-100 border-b">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Papers</h2>
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {recentPapers.map(paper => (
-              <button key={paper.id} onClick={() => openPaper(paper)} className="flex-shrink-0 p-3 bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow w-48">
-                <div className="text-sm font-medium line-clamp-2">{paper.title}</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {readingProgress[paper.id] && `Page ${readingProgress[paper.id].currentPage}/${readingProgress[paper.id].totalPages}`}
-                </div>
-              </button>
-            ))}
-          </div>
+        <div className="bg-nb-yellow border-b-3 border-black p-3 overflow-x-auto whitespace-nowrap">
+          <h2 className="inline-block font-black uppercase mr-4">Recent:</h2>
+          {recentPapers.map(paper => (
+            <button key={paper.id} onClick={() => openPaper(paper)} className="inline-block mr-3 bg-white border-2 border-black px-3 py-1 hover:shadow-nb transition-transform hover:-translate-y-1">
+               <span className="font-bold text-sm uppercase truncate max-w-[150px] inline-block align-bottom">{paper.title}</span>
+            </button>
+          ))}
         </div>
       )}
 
       {/* Kanban Board */}
       <div className="flex-1 overflow-hidden p-6">
         <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
-            {['to-read', 'reading', 'read'].map(status => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 h-full">
+            {['to-read', 'reading', 'read'].map((status) => (
               <Droppable key={status} droppableId={status}>
                 {(provided) => (
-                  <div ref={provided.innerRef} {...provided.droppableProps} className="bg-gray-100 rounded-xl p-4 flex flex-col">
-                    <h2 className="text-lg font-bold mb-4 text-gray-700 capitalize flex items-center gap-2">
-                      {status === 'to-read' && <FileText size={20} />}
-                      {status === 'reading' && <BookOpen size={20} />}
-                      {status === 'read' && <Download size={20} />}
-                      {status.replace('-', ' ')} ({columns[status].length})
-                    </h2>
-                    <div className="flex-1 overflow-y-auto space-y-3">
+                  <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col h-full">
+                    {/* Column Header */}
+                    <div className="border-3 border-black bg-black text-white p-3 mb-4 shadow-nb font-black text-xl uppercase tracking-widest flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        {status === 'to-read' && <FileText size={20} />}
+                        {status === 'reading' && <BookOpen size={20} />}
+                        {status === 'read' && <Download size={20} />}
+                        {status.replace('-', ' ')}
+                      </div>
+                      <span className="bg-white text-black px-2 py-0.5 text-sm border-2 border-white rounded-full">{columns[status].length}</span>
+                    </div>
+                    
+                    {/* Column Content (The Corkboard) */}
+                    <div className="flex-1 border-3 border-black bg-[radial-gradient(#000_1px,transparent_1px)] [background-size:10px_10px] p-4 space-y-4 overflow-y-auto shadow-nb-active">
                       {columns[status].map((paper, index) => (
                         <Draggable key={paper.id} draggableId={paper.id} index={index}>
-                          {(provided) => (
-                            <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className="bg-white rounded-lg shadow-sm p-4 hover:shadow-md transition-shadow border border-gray-200">
-                              <div className="flex items-start justify-between mb-2">
-                                <h3 className="font-semibold text-gray-800 flex-1 line-clamp-2">{paper.title}</h3>
-                                <div className="flex gap-1">
-                                  <button onClick={() => { setEditingPaper(paper); setEditForm(paper); setShowMetadataModal(true); }} className="p-1 text-gray-400 hover:text-indigo-600">
-                                    <Pencil size={16} />
-                                  </button>
-                                  <button onClick={() => deletePaper(paper.id)} className="p-1 text-gray-400 hover:text-red-600">
-                                    <Trash2 size={16} />
-                                  </button>
+                          {(provided) => {
+                            // Visual variations for "messy" look
+                            const rotate = index % 2 === 0 ? 'rotate-1' : '-rotate-1';
+                            const colorClass = paper.color || 'bg-nb-white';
+                            const paperColor = COLORS.find(c => c.class === colorClass) || COLORS[0];
+
+                            return (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`nb-postit ${paperColor.class} ${rotate} flex flex-col gap-2 relative group`}
+                                style={{...provided.draggableProps.style}}
+                              >
+                                {/* Tape visual */}
+                                <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-6 bg-white/50 rotate-2 backdrop-blur-sm border border-white/20 shadow-sm"></div>
+
+                                <div className="flex justify-between items-start">
+                                  <div className="font-bold text-lg leading-tight uppercase font-sans line-clamp-3 mt-2 flex-1">
+                                    {paper.title}
+                                  </div>
+                                  <div className="flex gap-1 ml-2">
+                                     <button onClick={() => { setEditingPaper(paper); setEditForm(paper); setShowMetadataModal(true); }} className="p-1 hover:bg-black/10 rounded"><Pencil size={14}/></button>
+                                     <button onClick={() => deletePaper(paper.id)} className="p-1 hover:bg-red-500 hover:text-white rounded"><Trash2 size={14}/></button>
+                                  </div>
                                 </div>
-                              </div>
-                              {paper.authors && <p className="text-sm text-gray-600 mb-1"><User size={12} className="inline mr-1" />{paper.authors}</p>}
-                              {paper.venue && <p className="text-sm text-gray-600 mb-1">{paper.venue}</p>}
-                              {paper.year && <p className="text-sm text-gray-500 mb-2"><Calendar size={12} className="inline mr-1" />{paper.year}</p>}
-                              {paper.tags && paper.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mb-3">
-                                  {paper.tags.map((tag, i) => (
-                                    <span key={i} className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs">{tag}</span>
-                                  ))}
+                                
+                                <div className="font-mono text-xs mt-1 border-t-2 border-black/20 pt-2">
+                                   {paper.authors && <div className="flex items-center gap-1"><User size={10}/> {paper.authors}</div>}
+                                   {paper.venue && <div className="truncate text-black/70">{paper.venue}</div>}
                                 </div>
-                              )}
-                              <div className="flex gap-2">
-                                <button onClick={() => openPaper(paper)} className="flex-1 bg-indigo-600 text-white px-3 py-2 rounded hover:bg-indigo-700 transition-colors text-sm flex items-center justify-center gap-2">
-                                  <Eye size={14} />
-                                  Read
-                                </button>
-                                {paper.pdfUrl && (
-                                  <a href={paper.pdfUrl} target="_blank" rel="noopener noreferrer" className="p-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors">
-                                    <ExternalLink size={14} />
-                                  </a>
+
+                                {paper.tags && paper.tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {paper.tags.map(tag => (
+                                      <span key={tag} className="text-[10px] font-bold border border-black px-1 bg-white/50 uppercase">{tag}</span>
+                                    ))}
+                                  </div>
                                 )}
+
+                                <div className="mt-3">
+                                  <button onClick={() => openPaper(paper)} className="w-full bg-black text-white font-bold py-2 px-2 text-xs border-2 border-transparent hover:bg-white hover:text-black hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
+                                    <Eye size={14} strokeWidth={3} /> READ NOW
+                                  </button>
+                                  {paper.pdfUrl && (
+                                     <a href={paper.pdfUrl} target="_blank" rel="noopener noreferrer" className="block text-center text-[10px] font-bold underline mt-1 hover:text-nb-purple">OPEN EXTERNAL</a>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          }}
                         </Draggable>
                       ))}
                       {provided.placeholder}
@@ -1024,49 +1013,56 @@ function App() {
 
       {/* Metadata Modal */}
       {showMetadataModal && editingPaper && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Edit Metadata</h2>
-              <button onClick={() => setShowMetadataModal(false)} className="text-gray-500 hover:text-gray-700">
-                <X size={24} />
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white border-3 border-black shadow-nb-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-8 relative">
+            <button onClick={() => setShowMetadataModal(false)} className="absolute top-4 right-4 hover:rotate-90 transition-transform"><X size={32} strokeWidth={3}/></button>
+            <h2 className="text-3xl font-black mb-6 uppercase border-b-3 border-black pb-4">Edit Paper Metadata</h2>
             
-            <div className="space-y-4">
+            <div className="space-y-5 font-bold">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
-                <input type="text" value={editForm.title || ''} onChange={(e) => setEditForm({...editForm, title: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Authors</label>
-                <input type="text" value={editForm.authors || ''} onChange={(e) => setEditForm({...editForm, authors: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                <label className="uppercase text-sm mb-1 block">Title</label>
+                <input value={editForm.title || ''} onChange={e => setEditForm({...editForm, title: e.target.value})} className="nb-input" />
               </div>
               
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-                  <input type="number" value={editForm.year || ''} onChange={(e) => setEditForm({...editForm, year: parseInt(e.target.value)})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Venue</label>
-                  <input type="text" value={editForm.venue || ''} onChange={(e) => setEditForm({...editForm, venue: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
-                </div>
+                 <div>
+                    <label className="uppercase text-sm mb-1 block">Authors</label>
+                    <input value={editForm.authors || ''} onChange={e => setEditForm({...editForm, authors: e.target.value})} className="nb-input" />
+                 </div>
+                 <div>
+                    <label className="uppercase text-sm mb-1 block">Year</label>
+                    <input type="number" value={editForm.year || ''} onChange={e => setEditForm({...editForm, year: parseInt(e.target.value)})} className="nb-input" />
+                 </div>
+              </div>
+
+              <div>
+                <label className="uppercase text-sm mb-1 block">Venue / Journal</label>
+                <input value={editForm.venue || ''} onChange={e => setEditForm({...editForm, venue: e.target.value})} className="nb-input" />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Tags (comma-separated)</label>
-                <input type="text" value={(editForm.tags || []).join(', ')} onChange={(e) => setEditForm({...editForm, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" />
+                <label className="uppercase text-sm mb-1 block">Tags (comma sep)</label>
+                <input value={(editForm.tags || []).join(', ')} onChange={e => setEditForm({...editForm, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean)})} className="nb-input" />
               </div>
               
-              <div className="flex gap-3 pt-4">
-                <button onClick={saveMetadata} className="flex-1 bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center justify-center gap-2">
-                  <Save size={18} />
-                  Save Changes
-                </button>
-                <button onClick={() => setShowMetadataModal(false)} className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-                  Cancel
+              <div>
+                <label className="uppercase text-sm mb-2 block">Post-it Color</label>
+                <div className="flex gap-3">
+                  {COLORS.map(c => (
+                    <button 
+                      key={c.name} 
+                      onClick={() => setEditForm({...editForm, color: c.class})}
+                      className={`w-12 h-12 border-3 border-black ${c.class} ${editForm.color === c.class ? 'ring-4 ring-black ring-offset-2 transform -translate-y-2 shadow-nb' : 'hover:-translate-y-1'}`}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex gap-4 pt-6 border-t-3 border-black mt-6">
+                <button onClick={() => setShowMetadataModal(false)} className="flex-1 py-3 border-3 border-black font-black uppercase hover:bg-gray-200">Cancel</button>
+                <button onClick={saveMetadata} className="flex-1 py-3 bg-black text-white border-3 border-black font-black uppercase hover:bg-nb-lime hover:text-black shadow-nb active:shadow-none active:translate-x-1 active:translate-y-1 transition-all">
+                  <Save className="inline mr-2 w-5 h-5"/> Save Changes
                 </button>
               </div>
             </div>

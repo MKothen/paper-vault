@@ -7,21 +7,27 @@ export default {
   theme: {
     extend: {
       colors: {
-        'neo-yellow': '#FFD700',
-        'neo-pink': '#FF69B4',
-        'neo-cyan': '#00FFFF',
-        'neo-lime': '#BFFF00',
-        'neo-orange': '#FF8C00',
-        'neo-purple': '#DA70D6',
+        'nb-yellow': '#FFD90F',
+        'nb-pink': '#FF90E8',
+        'nb-cyan': '#22d3ee',
+        'nb-lime': '#a3e635',
+        'nb-orange': '#fb923c',
+        'nb-purple': '#c084fc',
+        'nb-white': '#ffffff',
+        'nb-gray': '#f3f4f6',
       },
       boxShadow: {
-        'brutal': '4px 4px 0px 0px rgba(0, 0, 0, 1)',
-        'brutal-lg': '8px 8px 0px 0px rgba(0, 0, 0, 1)',
-        'brutal-xl': '12px 12px 0px 0px rgba(0, 0, 0, 1)',
+        'nb': '4px 4px 0px 0px rgba(0, 0, 0, 1)',
+        'nb-sm': '2px 2px 0px 0px rgba(0, 0, 0, 1)',
+        'nb-lg': '8px 8px 0px 0px rgba(0, 0, 0, 1)',
+        'nb-active': '1px 1px 0px 0px rgba(0, 0, 0, 1)',
+      },
+      borderWidth: {
+        '3': '3px',
       },
       fontFamily: {
         'mono': ['Courier New', 'monospace'],
-        'sans': ['Arial', 'Helvetica', 'sans-serif'],
+        'sans': ['Space Grotesk', 'Arial', 'sans-serif'], // Recommended font for this style
       },
     },
   },
