@@ -1,4 +1,4 @@
-/* */
+/* src/index.css */
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
@@ -37,30 +37,4 @@
   .nb-postit {
     @apply border-3 border-black shadow-nb p-4 text-black transition-transform hover:scale-105 hover:rotate-1;
   }
-}
-
-/* PDF.js Text Layer Styles - Ensuring standard behavior for selection */
-.textLayer {
-  position: absolute;
-  text-align: initial;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-  opacity: 0.2; /* Slight opacity to debug if needed, usually 0 */
-  line-height: 1.0;
-  pointer-events: text; /* Allow selection */
-}
-
-.textLayer span {
-  color: transparent;
-  position: absolute;
-  white-space: pre;
-  cursor: text;
-  transform-origin: 0% 0%;
-}
-
-.textLayer ::selection {
-  background: rgba(34, 211, 238, 0.3); /* Cyan selection color */
 }
