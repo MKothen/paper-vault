@@ -371,33 +371,40 @@ function App() {
   // Helper to execute highlight on a range
   // UPDATED: Aggregates multiple rects into ONE highlight object
   const performHighlight = useCallback((range, text) => {
-    if (!range || !canvasRef.current) return;
-
+    if (!range || !canvasRef.current || !textLayerRef.current) return;
+    
     const rects = range.getClientRects();
     const canvasRect = canvasRef.current.getBoundingClientRect();
+    
+    // Get the parent container that might have scroll
+    const container = canvasRef.current.parentElement;
+    const scrollLeft = container?.scrollLeft || 0;
+    const scrollTop = container?.scrollTop || 0;
+    
     const highlightRects = [];
-
-    // Collect all rects for this selection
+    
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
-      // Don't highlight zero-width spaces or empty lines
+      
+      // Skip zero-width/height rects
       if (rect.width === 0 || rect.height === 0) continue;
-
+    
+      // Calculate position relative to canvas, accounting for scroll
       highlightRects.push({
-        x: rect.left - canvasRect.left,
-        y: rect.top - canvasRect.top,
+        x: rect.left - canvasRect.left + scrollLeft,
+        y: rect.top - canvasRect.top + scrollTop,
         width: rect.width,
         height: rect.height,
       });
     }
-
+  
     if (highlightRects.length > 0) {
       const newHighlight = {
-        id: Date.now(), // ONE single ID for the entire highlight note
+        id: Date.now(),
         page: currentPage,
         color: selectedColor.alpha,
         text: text,
-        rects: highlightRects // Store array of rects to render visually
+        rects: highlightRects
       };
       
       const updatedHighlights = [...highlights, newHighlight];
