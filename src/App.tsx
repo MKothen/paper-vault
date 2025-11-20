@@ -71,31 +71,26 @@ const CITATION_FORMATS = {
 
 const STOP_WORDS = new Set(["the", "of", "and", "a", "to", "in", "is", "you", "that", "it", "he", "was", "for", "on", "are", "as", "with", "his", "they", "I", "at", "be", "this", "have", "from", "or", "one", "had", "by", "word", "but", "not", "what", "all", "were", "we", "when", "your", "can", "said", "there", "use", "an", "each", "which", "she", "do", "how", "their", "if", "will", "up", "other", "about", "out", "many", "then", "them", "these", "so", "some", "her", "would", "make", "like", "him", "into", "time", "has", "look", "two", "more", "write", "go", "see", "number", "no", "way", "could", "people", "my", "than", "first", "water", "been", "call", "who", "oil", "its", "now", "find", "study", "method", "results", "analysis", "using", "proposed", "based", "paper", "approach", "system", "data", "model", "models", "show", "our", "new", "between", "during", "through", "over", "also", "after", "different", "used", "experiments", "performance", "necessary", "important", "significant", "novel", "framework", "robust", "efficient", "better", "implications", "future", "work", "research", "problem", "issues", "case", "studies", "review", "overview", "survey", "state", "art", "challenges", "opportunities", "application", "applications", "development", "design", "implementation", "evaluation", "comparison", "effect", "effects", "impact", "influence", "role", "understanding", "towards", "via", "large", "small", "high", "low", "potential", "various"]);
 
-// FIXED: Extract PDF metadata and text
 const extractPdfMetadata = async (file) => {
   try {
     const arrayBuffer = await file.arrayBuffer();
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
     const pdf = await loadingTask.promise;
     
-    // Get PDF metadata
     const metadata = await pdf.getMetadata();
     const info = metadata.info;
     
-    // Extract title from metadata or first page
     let title = info.Title || "";
     let authors = info.Author || "";
     let abstract = "";
     
-    // If no title in metadata, extract from first page
     if (!title || title.trim().length === 0) {
       const firstPage = await pdf.getPage(1);
       const firstPageTextContent = await firstPage.getTextContent();
       const fullText = firstPageTextContent.items.map(item => item.str).join(' ');
       
-      // Try to find title (usually the first large text block)
       const lines = firstPageTextContent.items
-        .filter(item => item.height > 12) // Larger font = likely title
+        .filter(item => item.height > 12)
         .slice(0, 10)
         .map(item => item.str.trim())
         .filter(str => str.length > 0);
@@ -103,7 +98,6 @@ const extractPdfMetadata = async (file) => {
       title = lines[0] || file.name.replace('.pdf', '');
     }
     
-    // Extract abstract from first 2 pages
     try {
       let textForAbstract = "";
       const pagesToCheck = Math.min(2, pdf.numPages);
@@ -114,29 +108,25 @@ const extractPdfMetadata = async (file) => {
         textForAbstract += pageTextContent.items.map(item => item.str).join(' ') + ' ';
       }
       
-      // Find abstract section
       const abstractMatch = textForAbstract.match(/abstract[:\s]+(.*?)(?:introduction|keywords|1\.|$)/is);
       if (abstractMatch) {
-        abstract = abstractMatch[1].trim().substring(0, 500); // Limit to 500 chars
+        abstract = abstractMatch[1].trim().substring(0, 500);
       }
     } catch (e) {
       console.warn("Could not extract abstract:", e);
     }
     
-    // Extract year from metadata or text
     let year = null;
     if (info.CreationDate) {
       const yearMatch = info.CreationDate.match(/\d{4}/);
       if (yearMatch) year = parseInt(yearMatch[0]);
     }
     
-    // Clean up title
     title = title.trim().replace(/\s+/g, ' ');
     if (title.length > 200) {
       title = title.substring(0, 200) + '...';
     }
     
-    // Clean up authors
     authors = authors.trim().replace(/\s+/g, ' ');
     
     return {
@@ -147,7 +137,6 @@ const extractPdfMetadata = async (file) => {
     };
   } catch (error) {
     console.error("Error extracting PDF metadata:", error);
-    // Fallback to filename
     return {
       title: file.name.replace('.pdf', ''),
       authors: "",
@@ -166,7 +155,6 @@ const generateSmartTags = (title, abstract) => {
   
   const candidates = {};
   
-  // Bigrams from title (higher weight)
   for(let i=0; i < titleWords.length - 1; i++) {
     const w1 = titleWords[i];
     const w2 = titleWords[i+1];
@@ -176,12 +164,10 @@ const generateSmartTags = (title, abstract) => {
     }
   }
   
-  // Single words from title
   titleWords.forEach(w => {
     if(!STOP_WORDS.has(w) && w.length > 4) candidates[w] = (candidates[w] || 0) + 5;
   });
   
-  // Boost from abstract
   abstractWords.forEach(w => {
     if(candidates[w]) candidates[w] += 1;
   });
@@ -193,7 +179,6 @@ const generateSmartTags = (title, abstract) => {
 };
 
 function App() {
-  // ============ ALL HOOKS MUST BE AT THE TOP (React Rules of Hooks) ============
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [user, loading] = useAuthState(auth);
@@ -210,7 +195,6 @@ function App() {
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // PDF reader state
   const [pdfDoc, setPdfDoc] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [numPages, setNumPages] = useState(0);
@@ -218,7 +202,6 @@ function App() {
   const canvasRef = useRef(null);
   const textLayerRef = useRef(null);
 
-  // ENHANCED: Annotation state
   const [highlights, setHighlights] = useState([]);
   const [postits, setPostits] = useState([]);
   const [selectedColor, setSelectedColor] = useState(HIGHLIGHT_COLORS[0]);
@@ -226,7 +209,6 @@ function App() {
   const [annotationHistory, setAnnotationHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // ENHANCED: New features
   const [highlightOpacity, setHighlightOpacity] = useState(0.4);
   const [darkMode, setDarkMode] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -240,9 +222,6 @@ function App() {
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
   const pomodoroRef = useRef(null);
 
-  // ============ 2. EFFECTS & CALLBACKS (STILL NO RETURNS YET) ============
-
-  // Load papers from Firestore
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, "papers"), where("userId", "==", user.uid));
@@ -259,7 +238,6 @@ function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // Load reading progress
   useEffect(() => {
     if (!user) return;
     const saved = localStorage.getItem(`reading-progress-${user.uid}`);
@@ -272,7 +250,6 @@ function App() {
     }
   }, [user, papers]);
 
-  // Save reading progress
   useEffect(() => {
     if (selectedPaper && user) {
       const key = `reading-progress-${user.uid}`;
@@ -293,7 +270,6 @@ function App() {
     }
   }, [currentPage, selectedPaper, user, totalReadingTime]);
 
-  // Track reading time
   useEffect(() => {
     if (selectedPaper && activeView === 'reader') {
       const interval = setInterval(() => {
@@ -303,7 +279,6 @@ function App() {
     }
   }, [selectedPaper, activeView]);
 
-  // Pomodoro timer
   useEffect(() => {
     if (pomodoroRunning && pomodoroTime > 0) {
       pomodoroRef.current = setInterval(() => {
@@ -320,7 +295,6 @@ function App() {
     }
   }, [pomodoroRunning, pomodoroTime]);
 
-  // Load annotations when paper changes
   useEffect(() => {
     if (selectedPaper) {
       const savedHighlights = localStorage.getItem(`highlights-${selectedPaper.id}`);
@@ -343,7 +317,6 @@ function App() {
     }
   }, [selectedPaper]);
 
-  // PDF rendering - SIMPLIFIED without text layer for now
   useEffect(() => {
     if (!pdfDoc || !currentPage || !canvasRef.current) return;
 
@@ -363,14 +336,12 @@ function App() {
 
       await page.render({ canvasContext: context, viewport }).promise;
 
-      // Simple text layer rendering without external library
       if (textLayerRef.current) {
         textLayerRef.current.innerHTML = '';
         const textContent = await page.getTextContent();
         textLayerRef.current.style.width = `${viewport.width}px`;
         textLayerRef.current.style.height = `${viewport.height}px`;
         
-        // Create text divs manually
         textContent.items.forEach((item) => {
           const tx = pdfjsLib.Util.transform(
             pdfjsLib.Util.transform(viewport.transform, item.transform),
@@ -400,7 +371,6 @@ function App() {
     renderPage();
   }, [pdfDoc, currentPage, scale, darkMode]);
 
-  // Filtered & sorted papers
   const filteredPapers = useMemo(() => {
     let result = papers;
     
@@ -426,7 +396,6 @@ function App() {
     return result;
   }, [papers, searchTerm, filterStatus, sortBy]);
 
-  // Graph data
   const graphData = useMemo(() => {
     const nodes = papers.map(p => ({
       id: p.id,
@@ -451,7 +420,6 @@ function App() {
     return { nodes, links };
   }, [papers]);
 
-  // Annotation handlers
   const saveAnnotations = useCallback((newHighlights, newPostits) => {
     if (selectedPaper) {
       localStorage.setItem(`highlights-${selectedPaper.id}`, JSON.stringify(newHighlights));
@@ -592,7 +560,6 @@ function App() {
     alert('Citation copied to clipboard!');
   }, [selectedPaper, citationFormat]);
 
-  // UPDATED: Handle file upload with intelligent metadata extraction
   const handleFileUpload = async (file) => {
     if (!file || file.type !== 'application/pdf') {
       alert("Please upload a PDF file");
@@ -601,18 +568,14 @@ function App() {
 
     setIsUploading(true);
     try {
-      // Extract metadata from PDF
       const metadata = await extractPdfMetadata(file);
       
-      // Upload to storage
       const storageRef = ref(storage, `pdfs/${user.uid}/${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const pdfUrl = await getDownloadURL(storageRef);
 
-      // Generate smart tags from title and abstract
       const smartTags = generateSmartTags(metadata.title, metadata.abstract);
 
-      // Save to Firestore with extracted metadata
       await addDoc(collection(db, "papers"), {
         userId: user.uid,
         title: metadata.title,
@@ -671,9 +634,6 @@ function App() {
     setEditingPaper(null);
   };
 
-  // ============ 3. CONDITIONAL RETURNS (UI) ============
-
-  // Gatekeeper UI
   if (!isAuthorized) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50 flex items-center justify-center p-4">
@@ -732,11 +692,410 @@ function App() {
     );
   }
 
-  // Main app UI (rest remains the same as original - truncated for brevity, but continues with all the JSX for library, kanban, graph, reader views, and modals)
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* All the rest of the UI code remains exactly the same */}
-      {/* ... (keeping the original response length manageable) */}
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <BookOpen className="w-8 h-8 text-purple-600" />
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 text-transparent bg-clip-text">
+              Paper Vault
+            </h1>
+          </div>
+
+          <nav className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveView('library')}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${activeView === 'library' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <FileText className="w-5 h-5" />
+              Library
+            </button>
+            <button
+              onClick={() => setActiveView('kanban')}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${activeView === 'kanban' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <Layout className="w-5 h-5" />
+              Kanban
+            </button>
+            <button
+              onClick={() => setActiveView('graph')}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 ${activeView === 'graph' ? 'bg-purple-100 text-purple-700' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <Share2 className="w-5 h-5" />
+              Graph
+            </button>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={(e) => e.target.files[0] && handleFileUpload(e.target.files[0])}
+              accept=".pdf"
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50"
+            >
+              {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+              Upload PDF
+            </button>
+            <button
+              onClick={logout}
+              className="text-gray-600 hover:text-red-600 p-2 rounded-lg hover:bg-gray-100"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto p-6">
+        {/* Library View */}
+        {activeView === 'library' && (
+          <div>
+            <div className="mb-6 flex gap-4">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search papers..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+              </div>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="all">All Status</option>
+                <option value="to-read">To Read</option>
+                <option value="reading">Reading</option>
+                <option value="read">Read</option>
+              </select>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              >
+                <option value="date">Date</option>
+                <option value="title">Title</option>
+                <option value="author">Author</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredPapers.map(paper => (
+                <div key={paper.id} className="bg-white rounded-lg shadow-md hover:shadow-xl transition p-6">
+                  <h3 className="font-bold text-lg mb-2 line-clamp-2">{paper.title}</h3>
+                  <p className="text-gray-600 text-sm mb-2">{paper.authors}</p>
+                  <p className="text-gray-500 text-xs mb-4">{paper.year} • {paper.venue}</p>
+                  
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {(paper.tags || []).map((tag, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openPaper(paper)}
+                      className="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Read
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingPaper(paper);
+                        setEditForm(paper);
+                        setShowMetadataModal(true);
+                      }}
+                      className="p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-lg transition"
+                    >
+                      <Pencil className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => deletePaper(paper.id)}
+                      className="p-2 text-gray-600 hover:text-red-600 hover:bg-gray-100 rounded-lg transition"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Kanban View */}
+        {activeView === 'kanban' && (
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {['to-read', 'reading', 'read'].map(status => (
+                <Droppable key={status} droppableId={status}>
+                  {(provided) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="bg-gray-100 rounded-lg p-4 min-h-96"
+                    >
+                      <h3 className="font-bold text-lg mb-4 capitalize">
+                        {status.replace('-', ' ')} ({columns[status].length})
+                      </h3>
+                      {columns[status].map((paper, index) => (
+                        <Draggable key={paper.id} draggableId={paper.id} index={index}>
+                          {(provided) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className="bg-white rounded-lg p-4 mb-3 shadow hover:shadow-md transition"
+                            >
+                              <h4 className="font-semibold text-sm line-clamp-2 mb-2">{paper.title}</h4>
+                              <p className="text-gray-600 text-xs">{paper.authors}</p>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
+                    </div>
+                  )}
+                </Droppable>
+              ))}
+            </div>
+          </DragDropContext>
+        )}
+
+        {/* Graph View */}
+        {activeView === 'graph' && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <h2 className="text-2xl font-bold mb-4">Knowledge Graph</h2>
+            <div style={{ height: '600px' }}>
+              <ForceGraph2D
+                graphData={graphData}
+                nodeLabel="label"
+                nodeAutoColorBy="id"
+                linkWidth={link => link.value}
+                onNodeClick={(node) => {
+                  const paper = papers.find(p => p.id === node.id);
+                  if (paper) openPaper(paper);
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* PDF Reader View */}
+        {activeView === 'reader' && selectedPaper && (
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <button
+                onClick={() => setActiveView('library')}
+                className="flex items-center gap-2 text-purple-600 hover:text-purple-700"
+              >
+                <ChevronLeft className="w-5 h-5" />
+                Back to Library
+              </button>
+              <h2 className="text-xl font-bold flex-1 text-center">{selectedPaper.title}</h2>
+              <button
+                onClick={() => setShowCitationModal(true)}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-700"
+              >
+                <Copy className="w-5 h-5" />
+                Cite
+              </button>
+            </div>
+
+            {/* PDF Controls */}
+            <div className="mb-4 flex items-center justify-center gap-4 flex-wrap">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="p-2 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 disabled:opacity-50"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <span className="text-sm">
+                Page {currentPage} of {numPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(Math.min(numPages, currentPage + 1))}
+                disabled={currentPage === numPages}
+                className="p-2 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 disabled:opacity-50"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setScale(Math.max(0.5, scale - 0.25))}
+                className="p-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              >
+                <ZoomOut className="w-5 h-5" />
+              </button>
+              <span className="text-sm">{Math.round(scale * 100)}%</span>
+              <button
+                onClick={() => setScale(Math.min(3, scale + 0.25))}
+                className="p-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              >
+                <ZoomIn className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              >
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+              <button
+                onClick={exportAnnotations}
+                className="p-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* PDF Canvas */}
+            <div className="relative overflow-auto max-h-[800px] border border-gray-300 rounded-lg" onDoubleClick={handleDoubleClick} onMouseUp={handleTextSelection}>
+              <canvas ref={canvasRef} className="mx-auto" />
+              <div ref={textLayerRef} className="textLayer absolute top-0 left-0 mx-auto" style={{ pointerEvents: 'none' }} />
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Metadata Edit Modal */}
+      {showMetadataModal && editingPaper && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold">Edit Metadata</h3>
+              <button
+                onClick={() => setShowMetadataModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Title</label>
+                <input
+                  type="text"
+                  value={editForm.title || ''}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Authors</label>
+                <input
+                  type="text"
+                  value={editForm.authors || ''}
+                  onChange={(e) => setEditForm({ ...editForm, authors: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Year</label>
+                  <input
+                    type="number"
+                    value={editForm.year || ''}
+                    onChange={(e) => setEditForm({ ...editForm, year: parseInt(e.target.value) })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Venue</label>
+                  <input
+                    type="text"
+                    value={editForm.venue || ''}
+                    onChange={(e) => setEditForm({ ...editForm, venue: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Tags (comma-separated)</label>
+                <input
+                  type="text"
+                  value={(editForm.tags || []).join(', ')}
+                  onChange={(e) => setEditForm({ ...editForm, tags: e.target.value.split(',').map(t => t.trim()) })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={saveMetadata}
+                  className="flex-1 bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  Save Changes
+                </button>
+                <button
+                  onClick={() => setShowMetadataModal(false)}
+                  className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Citation Modal */}
+      {showCitationModal && selectedPaper && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold">Citation</h3>
+              <button
+                onClick={() => setShowCitationModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <select
+                value={citationFormat}
+                onChange={(e) => setCitationFormat(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+              >
+                {Object.keys(CITATION_FORMATS).map(format => (
+                  <option key={format} value={format}>{format}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg mb-4 font-mono text-sm whitespace-pre-wrap">
+              {CITATION_FORMATS[citationFormat](selectedPaper)}
+            </div>
+
+            <button
+              onClick={copyCitation}
+              className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
+            >
+              <Copy className="w-5 h-5" />
+              Copy to Clipboard
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
