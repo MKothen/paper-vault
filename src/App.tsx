@@ -302,9 +302,31 @@ function App() {
             viewport: viewport,
           });
           await textLayer.render();
-
-          // CRITICAL FIX: Remove transforms from individual text spans
+          // DIAGNOSTIC: Log text span positions
+          console.log('=== TEXT LAYER DIAGNOSTIC ===');
           const textSpans = textLayerDiv.querySelectorAll('span');
+          console.log('Total text spans:', textSpans.length);
+
+          // Check first 5 spans
+          Array.from(textSpans).slice(0, 5).forEach((span, i) => {
+            const rect = span.getBoundingClientRect();
+            const style = window.getComputedStyle(span);
+            console.log(`Span ${i}:`, {
+              text: span.textContent,
+              position: {
+                left: style.left,
+                top: style.top,
+                transform: style.transform
+              },
+              boundingRect: {
+                left: rect.left,
+                top: rect.top,
+                width: rect.width
+              }
+            });
+          });
+          console.log('=============================');
+          // CRITICAL FIX: Remove transforms from individual text spans
           textSpans.forEach(span => {
             // Preserve position but remove scale transforms that cause misalignment
             const currentTransform = span.style.transform;
@@ -383,70 +405,31 @@ function App() {
   // UPDATED: Aggregates multiple rects into ONE highlight object
   const performHighlight = useCallback((range, text) => {
     if (!range || !canvasRef.current || !textLayerRef.current) return;
-
+  
     const rects = range.getClientRects();
     const canvasRect = canvasRef.current.getBoundingClientRect();
-    const textLayerRect = textLayerRef.current.getBoundingClientRect();
-
-    console.log('=== HIGHLIGHT DEBUG ===');
-    console.log('Canvas rect:', {
-      left: canvasRect.left,
-      top: canvasRect.top,
-      width: canvasRect.width,
-      height: canvasRect.height
-    });
-    console.log('Text layer rect:', {
-      left: textLayerRect.left,
-      top: textLayerRect.top,
-      width: textLayerRect.width,
-      height: textLayerRect.height
-    });
-    console.log('Number of selection rects:', rects.length);
-
+    
+    // CRITICAL FIX: Use canvas rect as reference, not text layer rect
+    // The text layer has transforms that offset its content
     const highlightRects = [];
-
+  
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
-
+    
       // Skip zero-width/height rects
       if (rect.width === 0 || rect.height === 0) continue;
     
       const preciseWidth = rect.right - rect.left;
-
-      // DETAILED LOGGING - SHOW FIRST 3 AND LAST 3 RECTS
-      if (i < 3 || i >= rects.length - 3) {
-        console.log(`Rect ${i}:`, {
-          rawRect: {
-            left: rect.left,
-            right: rect.right,
-            top: rect.top,
-            bottom: rect.bottom,
-            width: rect.width,
-            height: rect.height
-          },
-          calculated: {
-            x: rect.left - textLayerRect.left,
-            y: rect.top - textLayerRect.top,
-            rectWidth: rect.width,
-            preciseWidth: preciseWidth,
-            widthDiff: rect.width - preciseWidth
-          }
-        });
-      }
-
+      
+      // Calculate position relative to the CANVAS, not text layer
       highlightRects.push({
-        x: rect.left - textLayerRect.left,
-        y: rect.top - textLayerRect.top,
-        width: preciseWidth,  // Using precise width
+        x: rect.left - canvasRect.left,
+        y: rect.top - canvasRect.top,
+        width: preciseWidth,
         height: rect.height,
       });
     }
-
-    console.log('Total highlight rects created:', highlightRects.length);
-    console.log('First rect:', highlightRects[0]);
-    console.log('Last rect:', highlightRects[highlightRects.length - 1]);
-    console.log('======================');
-
+  
     if (highlightRects.length > 0) {
       const newHighlight = {
         id: Date.now(),
@@ -455,7 +438,7 @@ function App() {
         text: text,
         rects: highlightRects
       };
-
+    
       const updatedHighlights = [...highlights, newHighlight];
       setHighlights(updatedHighlights);
       saveAnnotations(updatedHighlights, postits);
@@ -463,6 +446,7 @@ function App() {
       setHistoryIndex(annotationHistory.length);
     }
   }, [currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
+
 
 
 
