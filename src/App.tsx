@@ -260,7 +260,7 @@ function App() {
     if (!pdfDoc || !currentPage || !canvasRef.current) return;
     
     let isCancelled = false;
-
+  
     const renderPage = async () => {
       const page = await pdfDoc.getPage(currentPage);
       const viewport = page.getViewport({ scale });
@@ -271,40 +271,37 @@ function App() {
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       context.filter = 'none';
-
+    
       if (isCancelled) return;
-
+    
       // 2. Render PDF to Canvas
       await page.render({ canvasContext: context, viewport }).promise;
-
+    
       // 3. Render Text Layer
       if (textLayerRef.current && !isCancelled) {
         const textLayerDiv = textLayerRef.current;
         textLayerDiv.innerHTML = ''; // Clear previous text
         
-        // Set dimensions and position to match canvas
-        // CRITICAL: Ensure absolute positioning and match canvas dimensions
+        // CRITICAL FIX: Match exact canvas dimensions
         textLayerDiv.style.position = 'absolute';
         textLayerDiv.style.left = '0px';
         textLayerDiv.style.top = '0px';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
+        textLayerDiv.style.overflow = 'hidden'; // Prevent overflow
         
-        // CRITICAL: Set CSS variable for scale (required by pdf_viewer.css)
+        // CRITICAL: Set scale factor exactly
         textLayerDiv.style.setProperty('--scale-factor', scale.toString());
-
+      
         const textContent = await page.getTextContent();
         
-        // FIX: Use new TextLayer class API instead of deprecated renderTextLayer
         if (pdfjsLib.TextLayer) {
-            const textLayer = new pdfjsLib.TextLayer({
-                textContentSource: textContent,
-                container: textLayerDiv,
-                viewport: viewport,
-            });
-            await textLayer.render();
-        } else {
-            console.error("TextLayer class not found in pdfjsLib. Ensure you are using a compatible version.");
+          const textLayer = new pdfjsLib.TextLayer({
+            textContentSource: textContent,
+            container: textLayerDiv,
+            viewport: viewport,
+          });
+          await textLayer.render();
         }
       }
     };
@@ -313,6 +310,7 @@ function App() {
     
     return () => { isCancelled = true; };
   }, [pdfDoc, currentPage, scale]);
+
 
   const filteredPapers = useMemo(() => {
     let result = papers;
@@ -372,32 +370,29 @@ function App() {
   // UPDATED: Aggregates multiple rects into ONE highlight object
   const performHighlight = useCallback((range, text) => {
     if (!range || !canvasRef.current || !textLayerRef.current) return;
-    
+
     const rects = range.getClientRects();
     const canvasRect = canvasRef.current.getBoundingClientRect();
-    
-    // Get the parent container that might have scroll
-    const container = canvasRef.current.parentElement;
-    const scrollLeft = container?.scrollLeft || 0;
-    const scrollTop = container?.scrollTop || 0;
-    
+    const textLayerRect = textLayerRef.current.getBoundingClientRect();
+
     const highlightRects = [];
-    
+
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
-      
+
       // Skip zero-width/height rects
       if (rect.width === 0 || rect.height === 0) continue;
     
-      // Calculate position relative to canvas, accounting for scroll
+      // Calculate position relative to the text layer (not canvas)
+      // This ensures proper alignment since highlights are positioned absolutely within the same container
       highlightRects.push({
-        x: rect.left - canvasRect.left + scrollLeft,
-        y: rect.top - canvasRect.top + scrollTop,
+        x: rect.left - textLayerRect.left,
+        y: rect.top - textLayerRect.top,
         width: rect.width,
         height: rect.height,
       });
     }
-  
+
     if (highlightRects.length > 0) {
       const newHighlight = {
         id: Date.now(),
@@ -406,7 +401,7 @@ function App() {
         text: text,
         rects: highlightRects
       };
-      
+
       const updatedHighlights = [...highlights, newHighlight];
       setHighlights(updatedHighlights);
       saveAnnotations(updatedHighlights, postits);
@@ -414,6 +409,7 @@ function App() {
       setHistoryIndex(annotationHistory.length);
     }
   }, [currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
+
 
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
