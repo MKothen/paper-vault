@@ -287,7 +287,10 @@ function App() {
         textLayerDiv.style.top = '0';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
-        textLayerDiv.style.transform = 'none'; // Prevent any transforms
+        textLayerDiv.style.overflow = 'hidden';
+
+        // CRITICAL FIX: Remove any transforms
+        textLayerDiv.style.transform = 'none';
         textLayerDiv.style.transformOrigin = '0 0';
 
         const textContent = await page.getTextContent();
@@ -299,6 +302,17 @@ function App() {
             viewport: viewport,
           });
           await textLayer.render();
+
+          // CRITICAL FIX: Remove transforms from individual text spans
+          const textSpans = textLayerDiv.querySelectorAll('span');
+          textSpans.forEach(span => {
+            // Preserve position but remove scale transforms that cause misalignment
+            const currentTransform = span.style.transform;
+            if (currentTransform && currentTransform.includes('scaleX')) {
+              // Remove scaleX while keeping translate
+              span.style.transform = currentTransform.replace(/scaleX\([^)]+\)/g, '');
+            }
+          });
         }
       }
     };
@@ -307,6 +321,8 @@ function App() {
 
     return () => { isCancelled = true; };
   }, [pdfDoc, currentPage, scale]);
+
+
 
 
   const filteredPapers = useMemo(() => {
@@ -371,7 +387,7 @@ function App() {
     const rects = range.getClientRects();
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const textLayerRect = textLayerRef.current.getBoundingClientRect();
-      // ADD THIS LOGGING BLOCK HERE
+
     console.log('=== HIGHLIGHT DEBUG ===');
     console.log('Canvas rect:', {
       left: canvasRect.left,
@@ -386,6 +402,7 @@ function App() {
       height: textLayerRect.height
     });
     console.log('Number of selection rects:', rects.length);
+
     const highlightRects = [];
 
     for (let i = 0; i < rects.length; i++) {
@@ -394,16 +411,41 @@ function App() {
       // Skip zero-width/height rects
       if (rect.width === 0 || rect.height === 0) continue;
     
-      // CRITICAL FIX: Calculate precise width instead of using rect.width
       const preciseWidth = rect.right - rect.left;
+
+      // DETAILED LOGGING - SHOW FIRST 3 AND LAST 3 RECTS
+      if (i < 3 || i >= rects.length - 3) {
+        console.log(`Rect ${i}:`, {
+          rawRect: {
+            left: rect.left,
+            right: rect.right,
+            top: rect.top,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height
+          },
+          calculated: {
+            x: rect.left - textLayerRect.left,
+            y: rect.top - textLayerRect.top,
+            rectWidth: rect.width,
+            preciseWidth: preciseWidth,
+            widthDiff: rect.width - preciseWidth
+          }
+        });
+      }
 
       highlightRects.push({
         x: rect.left - textLayerRect.left,
         y: rect.top - textLayerRect.top,
-        width: preciseWidth,  // ← Changed from rect.width to preciseWidth
+        width: preciseWidth,  // Using precise width
         height: rect.height,
       });
     }
+
+    console.log('Total highlight rects created:', highlightRects.length);
+    console.log('First rect:', highlightRects[0]);
+    console.log('Last rect:', highlightRects[highlightRects.length - 1]);
+    console.log('======================');
 
     if (highlightRects.length > 0) {
       const newHighlight = {
@@ -421,6 +463,7 @@ function App() {
       setHistoryIndex(annotationHistory.length);
     }
   }, [currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
+
 
 
 

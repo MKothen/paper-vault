@@ -49,6 +49,7 @@
   opacity: 0.2; /* Keep at 0.2 for debugging, set to 0 when fixed */
   line-height: 1.0;
   white-space: pre;
+  transform: none !important;
 }
 
 .textLayer > span {
