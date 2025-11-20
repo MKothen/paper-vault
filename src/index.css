@@ -39,13 +39,19 @@
   }
 }
 
-/* PDF Viewer Overrides */
+/* Remove ALL existing .textLayer rules and replace with: */
 .textLayer {
-  opacity: 0.5;
-  mix-blend-mode: normal;
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  opacity: 0.2; /* Keep at 0.2 for debugging, set to 0 when fixed */
+  line-height: 1.0;
+  white-space: pre;
 }
 
-.textLayer span {
+.textLayer > span {
   color: transparent;
   position: absolute;
   white-space: pre;
@@ -53,33 +59,6 @@
   transform-origin: 0% 0%;
 }
 
-::selection {
-  background: rgba(34, 211, 238, 0.3); /* nb-cyan selection */
-}
-/* Fix text layer alignment issues */
-.textLayer {
-  position: absolute;
-  text-align: initial;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-  opacity: 0.2; /* For debugging - set to 0 in production */
-  line-height: 1.0;
-}
-
-.textLayer > span {
-  color: rgba(0, 0, 0, 0.3);
-  position: absolute;
-  white-space: pre;
-  cursor: text;
-  transform-origin: 0% 0%;
-  /* Prevent text from extending too far */
-  letter-spacing: initial;
-  word-spacing: initial;
-}
-
 .textLayer ::selection {
-  background: rgba(0, 0, 255, 0.3);
+  background: rgba(34, 211, 238, 0.4);
 }

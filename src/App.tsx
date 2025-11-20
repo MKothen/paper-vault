@@ -258,41 +258,37 @@ function App() {
   // --- MAIN PDF RENDERER EFFECT ---
   useEffect(() => {
     if (!pdfDoc || !currentPage || !canvasRef.current) return;
-    
+
     let isCancelled = false;
-  
+
     const renderPage = async () => {
       const page = await pdfDoc.getPage(currentPage);
       const viewport = page.getViewport({ scale });
-      
+
       // 1. Setup Canvas
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       context.filter = 'none';
-    
+
       if (isCancelled) return;
-    
+
       // 2. Render PDF to Canvas
       await page.render({ canvasContext: context, viewport }).promise;
-    
-      // 3. Render Text Layer
+
       if (textLayerRef.current && !isCancelled) {
         const textLayerDiv = textLayerRef.current;
-        textLayerDiv.innerHTML = ''; // Clear previous text
+        textLayerDiv.innerHTML = '';
         
-        // CRITICAL FIX: Match exact canvas dimensions
+        // Use EXACT pixel dimensions - no rounding
         textLayerDiv.style.position = 'absolute';
-        textLayerDiv.style.left = '0px';
-        textLayerDiv.style.top = '0px';
+        textLayerDiv.style.left = '0';
+        textLayerDiv.style.top = '0';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
-        textLayerDiv.style.overflow = 'hidden'; // Prevent overflow
+        textLayerDiv.style.overflow = 'hidden';
         
-        // CRITICAL: Set scale factor exactly
-        textLayerDiv.style.setProperty('--scale-factor', scale.toString());
-      
         const textContent = await page.getTextContent();
         
         if (pdfjsLib.TextLayer) {
@@ -305,9 +301,9 @@ function App() {
         }
       }
     };
-    
+
     renderPage();
-    
+
     return () => { isCancelled = true; };
   }, [pdfDoc, currentPage, scale]);
 
@@ -602,7 +598,13 @@ function App() {
   const openPaper = (paper) => {
     setSelectedPaper(paper);
     const loadPdf = async () => {
-      const loadingTask = pdfjsLib.getDocument(paper.pdfUrl);
+      const loadingTask = pdfjsLib.getDocument({
+        url: paper.pdfUrl,
+        // CRITICAL: Disable font substitution to fix width issues
+        disableFontFace: false,
+        useSystemFonts: false,
+        standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/'
+      });
       const pdf = await loadingTask.promise;
       setPdfDoc(pdf);
       setNumPages(pdf.numPages);
@@ -610,6 +612,7 @@ function App() {
     loadPdf();
     setActiveView('reader');
   };
+
 
   const saveMetadata = async () => {
     if (!editingPaper) return;
