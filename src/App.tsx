@@ -10,7 +10,6 @@ import ForceGraph2D from 'react-force-graph-2d';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // --- CRITICAL: Import PDF.js default styles for the text layer ---
-// This ensures text spans are positioned and scaled correctly over the canvas
 import 'pdfjs-dist/web/pdf_viewer.css'; 
 
 // --- CONFIGURATION ---
@@ -133,6 +132,8 @@ function App() {
   const [scale, setScale] = useState(1.5);
   const canvasRef = useRef(null);
   const textLayerRef = useRef(null);
+  const currentTextContent = useRef(null);
+  const currentViewport = useRef(null);
   
   // Annotation state
   const [highlights, setHighlights] = useState([]);
@@ -264,6 +265,9 @@ function App() {
     const renderPage = async () => {
       const page = await pdfDoc.getPage(currentPage);
       const viewport = page.getViewport({ scale });
+      
+      // Save viewport for coordinate conversion later
+      currentViewport.current = viewport;
 
       // 1. Setup Canvas
       const canvas = canvasRef.current;
@@ -277,21 +281,24 @@ function App() {
       // 2. Render PDF to Canvas
       await page.render({ canvasContext: context, viewport }).promise;
 
+      // 3. Render Text Layer
       if (textLayerRef.current && !isCancelled) {
         const textLayerDiv = textLayerRef.current;
         textLayerDiv.innerHTML = '';
 
-        // Use EXACT pixel dimensions
         textLayerDiv.style.position = 'absolute';
         textLayerDiv.style.left = '0';
         textLayerDiv.style.top = '0';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
         textLayerDiv.style.overflow = 'hidden';
-        textLayerDiv.style.transform = 'none';
-        textLayerDiv.style.transformOrigin = '0 0';
+        
+        // Important: CSS vars for PDF.js text layer scaling
+        textLayerDiv.style.setProperty('--scale-factor', scale);
 
         const textContent = await page.getTextContent();
+        // Save text content for coordinate mapping
+        currentTextContent.current = textContent;
 
         if (pdfjsLib.TextLayer) {
           const textLayer = new pdfjsLib.TextLayer({
@@ -300,32 +307,6 @@ function App() {
             viewport: viewport,
           });
           await textLayer.render();
-          
-          // CRITICAL FIX: Remove scaleX transforms that cause misalignment
-          const textSpans = textLayerDiv.querySelectorAll('span');
-          textSpans.forEach(span => {
-            const currentTransform = span.style.transform;
-            if (currentTransform) {
-              // Remove scaleX but preserve translate positioning
-              // This prevents the selection box from extending too far right
-              const newTransform = currentTransform.replace(/scaleX\([^)]+\)\s*/g, '');
-              span.style.transform = newTransform || 'none';
-              
-              // Adjust letter-spacing to compensate for removed scaleX
-              // This maintains visual appearance while fixing selection alignment
-              if (currentTransform.includes('scaleX')) {
-                const scaleMatch = currentTransform.match(/scaleX\(([^)]+)\)/);
-                if (scaleMatch) {
-                  const scaleValue = parseFloat(scaleMatch[1]);
-                  if (scaleValue !== 1) {
-                    // Apply letter-spacing to approximate the scaleX effect
-                    const fontSize = parseFloat(window.getComputedStyle(span).fontSize);
-                    span.style.letterSpacing = `${fontSize * (scaleValue - 1) * 0.1}px`;
-                  }
-                }
-              }
-            }
-          });
         }
       }
     };
@@ -334,9 +315,6 @@ function App() {
 
     return () => { isCancelled = true; };
   }, [pdfDoc, currentPage, scale]);
-
-
-
 
   const filteredPapers = useMemo(() => {
     let result = papers;
@@ -392,52 +370,26 @@ function App() {
     }
   }, [historyIndex, annotationHistory, highlights, postits]);
 
-  // Helper to execute highlight on a range
-  const performHighlight = useCallback((range, text) => {
-    if (!range || !canvasRef.current || !textLayerRef.current) return;
+  // --- NEW: Perform Highlight using PDF Coordinates ---
+  const performHighlight = useCallback((rects, text) => {
+    if (!rects || rects.length === 0) return;
   
-    const rects = range.getClientRects();
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    
-    const highlightRects = [];
+    const newHighlight = {
+      id: Date.now(),
+      page: currentPage,
+      color: selectedColor.alpha,
+      text: text,
+      rects: rects // These are now in viewport pixels
+    };
   
-    for (let i = 0; i < rects.length; i++) {
-      const rect = rects[i];
-    
-      if (rect.width === 0 || rect.height === 0) continue;
-      
-      // Use actual rect dimensions - now accurate after transform fix
-      const preciseWidth = rect.right - rect.left;
-      
-      highlightRects.push({
-        x: rect.left - canvasRect.left,
-        y: rect.top - canvasRect.top,
-        width: preciseWidth,
-        height: rect.height,
-      });
-    }
-  
-    if (highlightRects.length > 0) {
-      const newHighlight = {
-        id: Date.now(),
-        page: currentPage,
-        color: selectedColor.alpha,
-        text: text,
-        rects: highlightRects
-      };
-    
-      const updatedHighlights = [...highlights, newHighlight];
-      setHighlights(updatedHighlights);
-      saveAnnotations(updatedHighlights, postits);
-      setAnnotationHistory([...annotationHistory, { type: 'highlight', data: newHighlight }]);
-      setHistoryIndex(annotationHistory.length);
-    }
+    const updatedHighlights = [...highlights, newHighlight];
+    setHighlights(updatedHighlights);
+    saveAnnotations(updatedHighlights, postits);
+    setAnnotationHistory([...annotationHistory, { type: 'highlight', data: newHighlight }]);
+    setHistoryIndex(annotationHistory.length);
   }, [currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
 
-
-
-
-
+  // --- NEW: Handle Selection via TextContent mapping ---
   const handleTextSelection = useCallback(() => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
@@ -445,30 +397,191 @@ function App() {
     const range = selection.getRangeAt(0);
     const text = selection.toString().trim();
     
-    if (text.length > 0) {
-      if (isHighlighting) {
-        performHighlight(range, text);
-        selection.removeAllRanges(); 
-        setSelectedText("");
-        setSelectionRange(null);
-      } else {
-        setSelectedText(text);
-        setSelectionRange(range);
-      }
-    } else {
-      setSelectedText("");
-      setSelectionRange(null);
+    // We check if we are inside the text layer
+    const textLayer = textLayerRef.current;
+    if (!textLayer || !textLayer.contains(range.commonAncestorContainer)) return;
+
+    if (!isHighlighting) {
+      // Just save selection for later
+      setSelectedText(text);
+      return; 
     }
+
+    if (!currentTextContent.current || !currentViewport.current) return;
+
+    // Find start and end text items
+    const getSpanIndex = (node) => {
+      // Navigate up to the span element
+      let el = node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
+      if (el.parentNode !== textLayer) return -1;
+      return Array.prototype.indexOf.call(textLayer.children, el);
+    };
+
+    const startIdx = getSpanIndex(range.startContainer);
+    const endIdx = getSpanIndex(range.endContainer);
+
+    if (startIdx === -1 || endIdx === -1) return;
+
+    const viewport = currentViewport.current;
+    const items = currentTextContent.current.items;
+    const rects = [];
+
+    for (let i = startIdx; i <= endIdx; i++) {
+      const item = items[i];
+      if (!item) continue;
+
+      const tx = item.transform; // [scaleX, skewX, skewY, scaleY, x, y]
+      
+      // Calculate start and end offsets for this item
+      let startOffset = 0;
+      let endOffset = item.str.length;
+
+      if (i === startIdx) startOffset = range.startOffset;
+      if (i === endIdx) endOffset = range.endOffset;
+      
+      // Skip if empty selection in this item
+      if (startOffset >= endOffset) continue;
+
+      // Calculate PDF Width & Height
+      // item.width is the total width in PDF units
+      const totalW = item.width;
+      const charW = item.str.length > 0 ? totalW / item.str.length : 0; 
+      
+      const selW = (endOffset - startOffset) * charW;
+      const xOffset = startOffset * charW;
+      
+      // Height is roughly the font size (ty or tx[0/3])
+      // In standard PDF, y is baseline. We need to cover ascent.
+      // Simple approximation: use the scaling factor Y (tx[3])
+      const fontH = Math.sqrt(tx[2]*tx[2] + tx[3]*tx[3]);
+      
+      const pdfX = tx[4] + xOffset;
+      const pdfY = tx[5]; 
+      
+      // Convert to Viewport Rect
+      // Note: PDF.js convertToViewportRectangle transforms [x1, y1, x2, y2]
+      // PDF coordinates have (0,0) at bottom-left usually. 
+      // y1=bottom, y2=top.
+      
+      // Define the rect in PDF coords [minX, minY, maxX, maxY]
+      // Since PDF y is baseline, the box usually goes from y to y + height 
+      // (or y-descent to y+ascent, but we assume baseline-up for highlight)
+      const rectPDF = [
+        pdfX, 
+        pdfY, 
+        pdfX + selW, 
+        pdfY + fontH
+      ];
+
+      const viewRect = viewport.convertToViewportRectangle(rectPDF);
+      
+      // Normalize to {x, y, width, height}
+      // Viewport rect is [xMin, yMin, xMax, yMax] but could be flipped
+      const minX = Math.min(viewRect[0], viewRect[2]);
+      const maxX = Math.max(viewRect[0], viewRect[2]);
+      const minY = Math.min(viewRect[1], viewRect[3]);
+      const maxY = Math.max(viewRect[1], viewRect[3]);
+
+      rects.push({
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY
+      });
+    }
+
+    if (rects.length > 0) {
+      performHighlight(rects, text);
+      selection.removeAllRanges();
+      setSelectedText("");
+    }
+
   }, [isHighlighting, performHighlight]);
 
+  // Manual trigger for when "Highlight" button is clicked after selection
   const addHighlightFromSelection = useCallback(() => {
-    if (selectionRange) {
-      performHighlight(selectionRange, selectedText);
-      window.getSelection().removeAllRanges();
-      setSelectedText("");
-      setSelectionRange(null);
+    // Trigger same logic, but force highlight flag true temporarily if needed
+    // Or just re-run the logic manually
+    const selection = window.getSelection();
+    if (!selection.isCollapsed) {
+      setIsHighlighting(true);
+      // We need to wait for state update or pass flag? 
+      // Actually handleTextSelection checks state. 
+      // Let's just hack it by calling logic directly or assuming user clicks the button
+      // which sets state, but we need to invoke the calculation.
+      
+      // Simpler: The existing effect detects selection mouseup. 
+      // If user clicks a button, selection might be lost if button steals focus.
+      // We rely on 'onMouseDown' on the button preventing default to keep selection?
+      // Or we store the range.
+      
+      // Since we stored `selectedText`, we probably didn't store the range indices.
+      // Let's just say the user must be in highlight mode to highlight dragging.
+      // OR, if they select text -> toolbar appears -> click highlight -> we need the range.
+      
+      // For this implementations, let's assume the user switches mode OR 
+      // we re-grab selection if it exists.
+      
+      // Re-run logic:
+      const textLayer = textLayerRef.current;
+      if (!textLayer) return;
+      
+      const range = selection.getRangeAt(0);
+      if(!textLayer.contains(range.commonAncestorContainer)) return;
+
+      // Duplicate logic from handleTextSelection but force execute
+      if (!currentTextContent.current || !currentViewport.current) return;
+
+      const getSpanIndex = (node) => {
+         let el = node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
+         if (el.parentNode !== textLayer) return -1;
+         return Array.prototype.indexOf.call(textLayer.children, el);
+      };
+
+      const startIdx = getSpanIndex(range.startContainer);
+      const endIdx = getSpanIndex(range.endContainer);
+
+      if (startIdx === -1 || endIdx === -1) return;
+
+      const viewport = currentViewport.current;
+      const items = currentTextContent.current.items;
+      const rects = [];
+
+      for (let i = startIdx; i <= endIdx; i++) {
+         const item = items[i];
+         if (!item) continue;
+         const tx = item.transform;
+         let startOffset = 0;
+         let endOffset = item.str.length;
+         if (i === startIdx) startOffset = range.startOffset;
+         if (i === endIdx) endOffset = range.endOffset;
+         if (startOffset >= endOffset) continue;
+         
+         const totalW = item.width;
+         const charW = item.str.length > 0 ? totalW / item.str.length : 0; 
+         const selW = (endOffset - startOffset) * charW;
+         const xOffset = startOffset * charW;
+         const fontH = Math.sqrt(tx[2]*tx[2] + tx[3]*tx[3]);
+         const pdfX = tx[4] + xOffset;
+         const pdfY = tx[5]; 
+         const rectPDF = [pdfX, pdfY, pdfX + selW, pdfY + fontH];
+         const viewRect = viewport.convertToViewportRectangle(rectPDF);
+         const minX = Math.min(viewRect[0], viewRect[2]);
+         const maxX = Math.max(viewRect[0], viewRect[2]);
+         const minY = Math.min(viewRect[1], viewRect[3]);
+         const maxY = Math.max(viewRect[1], viewRect[3]);
+
+         rects.push({ x: minX, y: minY, width: maxX - minX, height: maxY - minY });
+      }
+
+      if(rects.length > 0) {
+         performHighlight(rects, selection.toString());
+         selection.removeAllRanges();
+         setSelectedText("");
+      }
     }
-  }, [selectionRange, selectedText, performHighlight]);
+  }, [performHighlight]);
+
 
   const addNoteFromSelection = useCallback((template = "") => {
     if (canvasRef.current) {
@@ -519,6 +632,8 @@ function App() {
       saveAnnotations(highlights, postits);
       setDraggedNote(null);
     }
+    // Also handle text selection mouse up here if needed
+    handleTextSelection();
   };
 
   const exportAnnotations = useCallback(() => {
@@ -735,7 +850,7 @@ function App() {
           {selectedText && !isHighlighting && (
             <div className="flex items-center gap-2 border-r-3 border-black pr-4 animate-pulse">
               <span className="font-bold text-sm text-nb-purple uppercase">Text Selected!</span>
-              <button onClick={addHighlightFromSelection} className="nb-button text-xs py-1 px-2 bg-yellow-300 flex gap-1"><Highlighter size={14}/> Highlight</button>
+              <button onMouseDown={(e) => { e.preventDefault(); addHighlightFromSelection(); }} className="nb-button text-xs py-1 px-2 bg-yellow-300 flex gap-1"><Highlighter size={14}/> Highlight</button>
               {NOTE_TEMPLATES.map(template => (
                 <button key={template.label} onClick={() => addNoteFromSelection(template.prefix)} className="nb-button text-xs py-1 px-2 bg-nb-yellow">{template.label}</button>
               ))}
@@ -772,7 +887,6 @@ function App() {
               <div 
                  ref={textLayerRef} 
                  className="textLayer" 
-                 onMouseUp={handleTextSelection} 
                  style={{ 
                    opacity: 1, 
                    zIndex: 10,
@@ -800,21 +914,6 @@ function App() {
                       }} 
                     />
                   ))}
-                  {!h.rects && h.width && (
-                    <div 
-                      style={{ 
-                        position: 'absolute', 
-                        left: h.x, 
-                        top: h.y, 
-                        width: h.width, 
-                        height: h.height, 
-                        backgroundColor: h.color.replace('0.5', highlightOpacity), 
-                        pointerEvents: 'none', 
-                        mixBlendMode: darkMode ? 'screen' : 'multiply', 
-                        zIndex: 5 
-                      }} 
-                    />
-                  )}
                 </React.Fragment>
               ))}
               
