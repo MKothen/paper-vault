@@ -4,7 +4,7 @@ import { auth, signInWithGoogle, logout, db, storage } from './firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { BookOpen, Trash2, Plus, LogOut, ExternalLink, Loader2, Pencil, X, Save, Search, FileText, StickyNote, Download, Wand2, Layout, Share2, User, Calendar, Clock, FileUp, Eye, Lock, Highlighter, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Undo2, Clipboard, Moon, Sun, Sidebar as SidebarIcon, Copy, Timer } from 'lucide-react';
+import { BookOpen, Trash2, Plus, LogOut, ExternalLink, Loader2, Pencil, X, Save, Search, FileText, StickyNote, Download, Wand2, Layout, Share2, User, Calendar, Clock, FileUp, Eye, Lock, Highlighter, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Undo2, Clipboard, Moon, Sun, Sidebar as SidebarIcon, Copy, Timer, MousePointer2 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
 import * as pdfjsLib from 'pdfjs-dist';
@@ -17,9 +17,9 @@ const APP_PASSWORD = "science-rocks";
 
 // Updated Neo-Brutalist Palette
 const COLORS = [
-  { name: 'Yellow', class: 'bg-nb-yellow', hex: '#FFD90F', border: 'border-black' },
+  { name: 'Yellow', class: 'bg-nb-yellow', hex: '#FFD90F',QH: '#FFD90F', border: 'border-black' },
   { name: 'Blue', class: 'bg-nb-cyan', hex: '#22d3ee', border: 'border-black' },
-  { name: 'Pink', class: 'bg-nb-pink', hex: '#FF90E8', border: 'border-black' },
+  { name: 'Pink', class: 'bg-nb-pink', hex: '#FF90E8',Qr: '#FF90E8', border: 'border-black' },
   { name: 'Green', class: 'bg-nb-lime', hex: '#a3e635', border: 'border-black' },
   { name: 'Purple', class: 'bg-nb-purple', hex: '#c084fc', border: 'border-black' },
   { name: 'Orange', class: 'bg-nb-orange', hex: '#fb923c', border: 'border-black' },
@@ -130,14 +130,19 @@ function App() {
   const [scale, setScale] = useState(1.5);
   const canvasRef = useRef(null);
   const textLayerRef = useRef(null);
+  const containerRef = useRef(null);
   
   // Annotation state
   const [highlights, setHighlights] = useState([]);
   const [postits, setPostits] = useState([]);
   const [selectedColor, setSelectedColor] = useState(HIGHLIGHT_COLORS[0]);
   const [selectedText, setSelectedText] = useState("");
+  const [selectionRange, setSelectionRange] = useState(null);
   const [annotationHistory, setAnnotationHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  
+  // Dragging Sticky Notes
+  const [draggedNote, setDraggedNote] = useState(null);
   
   // New features
   const [highlightOpacity, setHighlightOpacity] = useState(0.4);
@@ -266,12 +271,8 @@ function App() {
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       
-      // Brutalist Dark Mode: High Contrast Invert
-      if (darkMode) {
-        context.filter = 'invert(1) grayscale(1) contrast(1.5)';
-      } else {
-        context.filter = 'none';
-      }
+      // Clear filter before rendering - we use CSS filter for dark mode now
+      context.filter = 'none';
       
       await page.render({ canvasContext: context, viewport }).promise;
       
@@ -291,7 +292,7 @@ function App() {
     };
     
     renderPage();
-  }, [pdfDoc, currentPage, scale, darkMode]);
+  }, [pdfDoc, currentPage, scale]); // Removed darkMode from dependency to avoid re-render loop
 
   // Filtered & sorted papers
   const filteredPapers = useMemo(() => {
@@ -350,50 +351,63 @@ function App() {
     }
   }, [historyIndex, annotationHistory, highlights, postits]);
 
-  const handleDoubleClick = useCallback((e) => {
-    if (e.target.closest('.textLayer') && canvasRef.current) {
-      const selection = window.getSelection();
+  const handleTextSelection = useCallback(() => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
       const text = selection.toString().trim();
-      if (text) {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        const canvasRect = canvasRef.current.getBoundingClientRect();
-        
-        const newHighlight = {
-          id: Date.now(),
+      if (text.length > 0) {
+        setSelectedText(text);
+        setSelectionRange(range);
+      } else {
+        setSelectedText("");
+        setSelectionRange(null);
+      }
+    }
+  }, []);
+
+  const addHighlightFromSelection = useCallback(() => {
+    if (selectionRange && canvasRef.current) {
+      const rects = selectionRange.getClientRects();
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const newHighlights = [];
+
+      for (let i = 0; i < rects.length; i++) {
+        const rect = rects[i];
+        newHighlights.push({
+          id: Date.now() + i,
           page: currentPage,
           x: rect.left - canvasRect.left,
           y: rect.top - canvasRect.top,
           width: rect.width,
           height: rect.height,
           color: selectedColor.alpha,
-          text: text
-        };
-        
-        const newHighlights = [...highlights, newHighlight];
-        setHighlights(newHighlights);
-        saveAnnotations(newHighlights, postits);
-        setAnnotationHistory([...annotationHistory, { type: 'highlight', data: newHighlight }]);
-        setHistoryIndex(annotationHistory.length);
+          text: selectedText // Store text with the first rect, or all
+        });
       }
-    }
-  }, [currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
 
-  const handleTextSelection = useCallback(() => {
-    const selection = window.getSelection();
-    const text = selection.toString().trim();
-    if (text.length > 0) setSelectedText(text);
-  }, []);
+      const updatedHighlights = [...highlights, ...newHighlights];
+      setHighlights(updatedHighlights);
+      saveAnnotations(updatedHighlights, postits);
+      setAnnotationHistory([...annotationHistory, { type: 'highlight', data: newHighlights[0] }]); // Simplified history
+      setHistoryIndex(annotationHistory.length);
+      
+      // Clear selection
+      window.getSelection().removeAllRanges();
+      setSelectedText("");
+      setSelectionRange(null);
+    }
+  }, [selectionRange, selectedText, currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
 
   const addNoteFromSelection = useCallback((template = "") => {
-    if (selectedText && canvasRef.current) {
+    if (canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const newPostit = {
         id: Date.now(),
         page: currentPage,
-        x: canvasRect.width / 2 - 100,
+        x: canvasRect.width / 2 - 100, // Default center
         y: canvasRect.height / 2 - 75,
-        text: template + selectedText,
+        text: template + (selectedText || ""),
         color: COLORS[0]
       };
       
@@ -401,8 +415,41 @@ function App() {
       setPostits(newPostits);
       saveAnnotations(highlights, newPostits);
       setSelectedText("");
+      setSelectionRange(null);
+      window.getSelection().removeAllRanges();
     }
   }, [selectedText, currentPage, postits, highlights, saveAnnotations]);
+
+  // Sticky Note Dragging Handlers
+  const handleNoteMouseDown = (e, id) => {
+    e.stopPropagation(); // Prevent other click events
+    const note = postits.find(p => p.id === id);
+    if (!note) return;
+    setDraggedNote({
+      id,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: note.x,
+      origY: note.y
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (draggedNote) {
+      const dx = e.clientX - draggedNote.startX;
+      const dy = e.clientY - draggedNote.startY;
+      setPostits(prev => prev.map(p => 
+        p.id === draggedNote.id ? { ...p, x: draggedNote.origX + dx, y: draggedNote.origY + dy } : p
+      ));
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (draggedNote) {
+      saveAnnotations(highlights, postits);
+      setDraggedNote(null);
+    }
+  };
 
   const exportAnnotations = useCallback(() => {
     if (!selectedPaper) return;
@@ -420,7 +467,7 @@ function App() {
     Object.entries(highlightsByColor).forEach(([color, items]) => {
       markdown += `### ${color} Highlights\n`;
       items.forEach(h => {
-        markdown += `- **Page ${h.page}**: "${h.text}"\n`;
+        markdown += `- **Page ${h.page}**: "${h.text || 'Highlighted Area'}"\n`;
       });
       markdown += '\n';
     });
@@ -458,12 +505,6 @@ function App() {
       alert('No matches found');
     }
   }, [pdfDoc, numPages]);
-
-  const bulkDeleteHighlights = useCallback((colorToDelete) => {
-    const filtered = highlights.filter(h => h.color !== colorToDelete);
-    setHighlights(filtered);
-    saveAnnotations(filtered, postits);
-  }, [highlights, postits, saveAnnotations]);
 
   const copyCitation = useCallback(() => {
     if (!selectedPaper) return;
@@ -606,7 +647,7 @@ function App() {
     const annotationCount = highlights.length + postits.length;
 
     return (
-      <div className={`h-screen flex flex-col ${darkMode ? 'bg-black text-white' : 'bg-nb-gray text-black'}`}>
+      <div className={`h-screen flex flex-col ${darkMode ? 'bg-black text-white' : 'bg-nb-gray text-black'}`} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
         {/* Top Toolbar */}
         <div className={`${darkMode ? 'bg-gray-900 border-gray-700' : 'bg-white border-black'} border-b-3 p-3 flex items-center justify-between z-20`}>
           <div className="flex items-center gap-4">
@@ -656,9 +697,17 @@ function App() {
             ))}
           </div>
           
+          {/* General add note button when nothing selected */}
+          <button onClick={() => addNoteFromSelection("")} className="nb-button text-xs py-1 px-2 bg-nb-pink flex gap-2 items-center">
+            <StickyNote size={14}/> Add Note
+          </button>
+
           {selectedText && (
             <div className="flex items-center gap-2 border-r-3 border-black pr-4 animate-pulse">
               <span className="font-bold text-sm text-nb-purple uppercase">Text Selected!</span>
+              <button onClick={addHighlightFromSelection} className="nb-button text-xs py-1 px-2 bg-yellow-300 flex gap-1">
+                 <Highlighter size={14}/> Highlight
+              </button>
               {NOTE_TEMPLATES.map(template => (
                 <button key={template.label} onClick={() => addNoteFromSelection(template.prefix)} className="nb-button text-xs py-1 px-2 bg-nb-yellow">
                   {template.label}
@@ -688,7 +737,7 @@ function App() {
             
             {/* Reading Progress Bar */}
             <div className="w-full max-w-4xl mb-6 bg-white border-3 border-black p-2 shadow-nb">
-              <div className="flex justify-between text-xs font-bold uppercase mb-1">
+              <div className="flex justify-between text-xs font-bold uppercase mb-1 text-black">
                 <span>Reading Progress: {Math.round((currentPage / numPages) * 100)}%</span>
                 <span>Time: {Math.floor(totalReadingTime / 60)}m</span>
               </div>
@@ -699,28 +748,37 @@ function App() {
             
             {/* PDF Canvas Container */}
             <div className="relative border-3 border-black shadow-nb-xl bg-white">
-              <canvas ref={canvasRef} />
-              <div ref={textLayerRef} className="textLayer absolute top-0 left-0" onMouseUp={handleTextSelection} onDoubleClick={handleDoubleClick} />
+              <canvas ref={canvasRef} className={darkMode ? "invert grayscale contrast-125" : ""} />
+              <div ref={textLayerRef} className="textLayer absolute top-0 left-0" onMouseUp={handleTextSelection} />
               
-              {/* Highlights Overlay */}
+              {/* Highlights Overlay - Rendered on top of canvas but under text layer interaction */}
               {currentHighlights.map(h => (
-                <div key={h.id} style={{ position: 'absolute', left: h.x, top: h.y, width: h.width, height: h.height, backgroundColor: h.color.replace('0.4', highlightOpacity), pointerEvents: 'none', mixBlendMode: 'multiply' }} />
+                <div key={h.id} style={{ position: 'absolute', left: h.x, top: h.y, width: h.width, height: h.height, backgroundColor: h.color.replace('0.4', highlightOpacity), pointerEvents: 'none', mixBlendMode: darkMode ? 'screen' : 'multiply' }} />
               ))}
               
               {/* Sticky Notes Overlay */}
               {currentPostits.map(p => (
-                <div key={p.id} className={`absolute w-48 nb-postit ${p.color.class || 'bg-nb-yellow'} z-30`} style={{ left: p.x, top: p.y }}>
-                  <button onClick={() => { const filtered = postits.filter(item => item.id !== p.id); setPostits(filtered); saveAnnotations(highlights, filtered); }} className="absolute top-1 right-1 hover:text-red-600">
+                <div 
+                    key={p.id} 
+                    className={`absolute w-48 nb-postit ${p.color.class || 'bg-nb-yellow'} z-30 cursor-move`} 
+                    style={{ left: p.x, top: p.y }}
+                    onMouseDown={(e) => handleNoteMouseDown(e, p.id)}
+                >
+                  <button 
+                    onMouseDown={(e) => e.stopPropagation()} // Prevent drag start when clicking delete
+                    onClick={() => { const filtered = postits.filter(item => item.id !== p.id); setPostits(filtered); saveAnnotations(highlights, filtered); }} 
+                    className="absolute top-1 right-1 hover:text-red-600"
+                  >
                     <X className="w-4 h-4" strokeWidth={3} />
                   </button>
-                  <p className="font-mono text-sm leading-tight mt-2">{p.text}</p>
+                  <p className="font-mono text-sm leading-tight mt-2 select-none pointer-events-none">{p.text}</p>
                 </div>
               ))}
             </div>
           </div>
           
           {/* Sidebar */}
-          <div className={`${showSidebar ? 'w-96' : 'w-0'} overflow-hidden transition-all duration-300 bg-white border-l-3 border-black flex flex-col z-20`}>
+          <div className={`${showSidebar ? 'w-96' : 'w-0'} overflow-hidden transition-all duration-300 bg-white border-l-3 border-black flex flex-col z-20 text-black`}>
             <div className="p-4 border-b-3 border-black bg-nb-yellow flex justify-between items-center">
               <h3 className="font-black text-xl uppercase">Annotations ({annotationCount})</h3>
               <button onClick={() => setShowSidebar(false)}><X className="w-6 h-6" strokeWidth={3} /></button>
@@ -798,16 +856,16 @@ function App() {
           <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
             <div className="nb-card w-full max-w-2xl p-6">
               <div className="flex justify-between items-center mb-4 border-b-3 border-black pb-2">
-                <h3 className="text-2xl font-black uppercase">Cite This Paper</h3>
+                <h3 className="text-2xl font-black uppercase text-black">Cite This Paper</h3>
                 <button onClick={() => setShowCitationModal(false)}><X className="w-8 h-8" strokeWidth={3}/></button>
               </div>
               <div className="mb-4">
-                <label className="font-bold block mb-2 uppercase">Format</label>
+                <label className="font-bold block mb-2 uppercase text-black">Format</label>
                 <select value={citationFormat} onChange={(e) => setCitationFormat(e.target.value)} className="nb-input">
                   {Object.keys(CITATION_FORMATS).map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
               </div>
-              <div className="bg-nb-gray border-3 border-black p-4 font-mono text-sm mb-4 whitespace-pre-wrap">
+              <div className="bg-nb-gray border-3 border-black p-4 font-mono text-sm mb-4 whitespace-pre-wrap text-black">
                 {CITATION_FORMATS[citationFormat](selectedPaper)}
               </div>
               <button onClick={copyCitation} className="nb-button w-full bg-nb-lime flex justify-center gap-2">

@@ -1,3 +1,4 @@
+/* */
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
 @tailwind base;
 @tailwind components;
@@ -40,5 +41,18 @@
 
 /* PDF Viewer Overrides */
 .textLayer {
-  mix-blend-mode: multiply;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.3); /* nb-cyan selection */
 }
