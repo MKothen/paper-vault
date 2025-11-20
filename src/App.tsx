@@ -277,12 +277,16 @@ function App() {
       // 2. Render PDF to Canvas
       await page.render({ canvasContext: context, viewport }).promise;
 
-      // 3. Render Text Layer (The fix for selection)
+      // 3. Render Text Layer
       if (textLayerRef.current && !isCancelled) {
         const textLayerDiv = textLayerRef.current;
         textLayerDiv.innerHTML = ''; // Clear previous text
         
-        // Set dimensions to match canvas
+        // Set dimensions and position to match canvas
+        // CRITICAL: Ensure absolute positioning and match canvas dimensions
+        textLayerDiv.style.position = 'absolute';
+        textLayerDiv.style.left = '0px';
+        textLayerDiv.style.top = '0px';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
         
@@ -292,8 +296,6 @@ function App() {
         const textContent = await page.getTextContent();
         
         // FIX: Use new TextLayer class API instead of deprecated renderTextLayer
-        // We assume pdfjsLib exports TextLayer. If utilizing module import, ensure TextLayer is imported.
-        // Note: pdfjs-dist/build/pdf.mjs typically exports TextLayer in v4+
         if (pdfjsLib.TextLayer) {
             const textLayer = new pdfjsLib.TextLayer({
                 textContentSource: textContent,
@@ -358,7 +360,7 @@ function App() {
     if (historyIndex >= 0) {
       const action = annotationHistory[historyIndex];
       if (action.type === 'highlight') {
-        setHighlights(highlights.filter(h => h.id !== action.data.id));
+        setHighlights(highlights.filter(h => h.id !== action.data.id)); 
       } else if (action.type === 'postit') {
         setPostits(postits.filter(p => p.id !== action.data.id));
       }
@@ -367,36 +369,41 @@ function App() {
   }, [historyIndex, annotationHistory, highlights, postits]);
 
   // Helper to execute highlight on a range
+  // UPDATED: Aggregates multiple rects into ONE highlight object
   const performHighlight = useCallback((range, text) => {
     if (!range || !canvasRef.current) return;
 
     const rects = range.getClientRects();
     const canvasRect = canvasRef.current.getBoundingClientRect();
-    const newHighlights = [];
+    const highlightRects = [];
 
+    // Collect all rects for this selection
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
       // Don't highlight zero-width spaces or empty lines
       if (rect.width === 0 || rect.height === 0) continue;
 
-      newHighlights.push({
-        id: Date.now() + i,
-        page: currentPage,
-        // Calculate relative coordinates
+      highlightRects.push({
         x: rect.left - canvasRect.left,
         y: rect.top - canvasRect.top,
         width: rect.width,
         height: rect.height,
-        color: selectedColor.alpha,
-        text: text
       });
     }
 
-    if (newHighlights.length > 0) {
-      const updatedHighlights = [...highlights, ...newHighlights];
+    if (highlightRects.length > 0) {
+      const newHighlight = {
+        id: Date.now(), // ONE single ID for the entire highlight note
+        page: currentPage,
+        color: selectedColor.alpha,
+        text: text,
+        rects: highlightRects // Store array of rects to render visually
+      };
+      
+      const updatedHighlights = [...highlights, newHighlight];
       setHighlights(updatedHighlights);
       saveAnnotations(updatedHighlights, postits);
-      setAnnotationHistory([...annotationHistory, { type: 'highlight', data: newHighlights[0] }]);
+      setAnnotationHistory([...annotationHistory, { type: 'highlight', data: newHighlight }]);
       setHistoryIndex(annotationHistory.length);
     }
   }, [currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
@@ -409,14 +416,12 @@ function App() {
     const text = selection.toString().trim();
     
     if (text.length > 0) {
-      // If Highlighter Tool is active, highlight immediately
       if (isHighlighting) {
         performHighlight(range, text);
-        selection.removeAllRanges(); // Deselect text to show highlight clearly
+        selection.removeAllRanges(); 
         setSelectedText("");
         setSelectionRange(null);
       } else {
-        // Otherwise, just save selection to show the floating menu
         setSelectedText(text);
         setSelectionRange(range);
       }
@@ -717,24 +722,66 @@ function App() {
               </div>
             </div>
             
-            <div className="relative border-3 border-black shadow-nb-xl bg-white">
-              <canvas ref={canvasRef} className={darkMode ? "invert grayscale contrast-125" : ""} />
+            {/* UPDATED CONTAINER: fit-content width to hug the canvas, preventing misalignment */}
+            <div 
+              className="relative border-3 border-black shadow-nb-xl bg-white mx-auto"
+              style={{ width: 'fit-content', height: 'fit-content' }}
+            >
+              <canvas 
+                ref={canvasRef} 
+                className={`block ${darkMode ? "invert grayscale contrast-125" : ""}`} 
+              />
               
-              {/* TEXT LAYER: Fixed with correct z-index and styling */}
+              {/* TEXT LAYER: Correctly positioned z-index 10 */}
               <div 
                  ref={textLayerRef} 
-                 className="textLayer absolute top-0 left-0" 
+                 className="textLayer" 
                  onMouseUp={handleTextSelection} 
                  style={{ 
-                   // mixBlendMode: 'multiply', // Removed: can cause text to disappear in some browsers
                    opacity: 1, 
-                   zIndex: 10  // CRITICAL: Ensure text is above canvas
+                   zIndex: 10,
+                   position: 'absolute',
+                   left: 0,
+                   top: 0
                  }}
               />
               
-              {/* Highlights */}
+              {/* Highlights: Render each rect within the highlight object */}
               {currentHighlights.map(h => (
-                <div key={h.id} style={{ position: 'absolute', left: h.x, top: h.y, width: h.width, height: h.height, backgroundColor: h.color.replace('0.5', highlightOpacity), pointerEvents: 'none', mixBlendMode: darkMode ? 'screen' : 'multiply', zIndex: 5 }} />
+                <React.Fragment key={h.id}>
+                  {h.rects && h.rects.map((rect, i) => (
+                    <div 
+                      key={i} 
+                      style={{ 
+                        position: 'absolute', 
+                        left: rect.x, 
+                        top: rect.y, 
+                        width: rect.width, 
+                        height: rect.height, 
+                        backgroundColor: h.color.replace('0.5', highlightOpacity), 
+                        pointerEvents: 'none', 
+                        mixBlendMode: darkMode ? 'screen' : 'multiply', 
+                        zIndex: 5 
+                      }} 
+                    />
+                  ))}
+                  {/* Backward compatibility for old highlights without rects array */}
+                  {!h.rects && h.width && (
+                    <div 
+                      style={{ 
+                        position: 'absolute', 
+                        left: h.x, 
+                        top: h.y, 
+                        width: h.width, 
+                        height: h.height, 
+                        backgroundColor: h.color.replace('0.5', highlightOpacity), 
+                        pointerEvents: 'none', 
+                        mixBlendMode: darkMode ? 'screen' : 'multiply', 
+                        zIndex: 5 
+                      }} 
+                    />
+                  )}
+                </React.Fragment>
               ))}
               
               {currentPostits.map(p => (
