@@ -281,15 +281,13 @@ function App() {
         const textLayerDiv = textLayerRef.current;
         textLayerDiv.innerHTML = '';
 
-        // Use EXACT pixel dimensions - no rounding
+        // Use EXACT pixel dimensions
         textLayerDiv.style.position = 'absolute';
         textLayerDiv.style.left = '0';
         textLayerDiv.style.top = '0';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
         textLayerDiv.style.overflow = 'hidden';
-
-        // CRITICAL FIX: Remove any transforms
         textLayerDiv.style.transform = 'none';
         textLayerDiv.style.transformOrigin = '0 0';
 
@@ -302,37 +300,30 @@ function App() {
             viewport: viewport,
           });
           await textLayer.render();
-          // DIAGNOSTIC: Log text span positions
-          console.log('=== TEXT LAYER DIAGNOSTIC ===');
+          
+          // CRITICAL FIX: Remove scaleX transforms that cause misalignment
           const textSpans = textLayerDiv.querySelectorAll('span');
-          console.log('Total text spans:', textSpans.length);
-
-          // Check first 5 spans
-          Array.from(textSpans).slice(0, 5).forEach((span, i) => {
-            const rect = span.getBoundingClientRect();
-            const style = window.getComputedStyle(span);
-            console.log(`Span ${i}:`, {
-              text: span.textContent,
-              position: {
-                left: style.left,
-                top: style.top,
-                transform: style.transform
-              },
-              boundingRect: {
-                left: rect.left,
-                top: rect.top,
-                width: rect.width
-              }
-            });
-          });
-          console.log('=============================');
-          // CRITICAL FIX: Remove transforms from individual text spans
           textSpans.forEach(span => {
-            // Preserve position but remove scale transforms that cause misalignment
             const currentTransform = span.style.transform;
-            if (currentTransform && currentTransform.includes('scaleX')) {
-              // Remove scaleX while keeping translate
-              span.style.transform = currentTransform.replace(/scaleX\([^)]+\)/g, '');
+            if (currentTransform) {
+              // Remove scaleX but preserve translate positioning
+              // This prevents the selection box from extending too far right
+              const newTransform = currentTransform.replace(/scaleX\([^)]+\)\s*/g, '');
+              span.style.transform = newTransform || 'none';
+              
+              // Adjust letter-spacing to compensate for removed scaleX
+              // This maintains visual appearance while fixing selection alignment
+              if (currentTransform.includes('scaleX')) {
+                const scaleMatch = currentTransform.match(/scaleX\(([^)]+)\)/);
+                if (scaleMatch) {
+                  const scaleValue = parseFloat(scaleMatch[1]);
+                  if (scaleValue !== 1) {
+                    // Apply letter-spacing to approximate the scaleX effect
+                    const fontSize = parseFloat(window.getComputedStyle(span).fontSize);
+                    span.style.letterSpacing = `${fontSize * (scaleValue - 1) * 0.1}px`;
+                  }
+                }
+              }
             }
           });
         }
@@ -402,26 +393,22 @@ function App() {
   }, [historyIndex, annotationHistory, highlights, postits]);
 
   // Helper to execute highlight on a range
-  // UPDATED: Aggregates multiple rects into ONE highlight object
   const performHighlight = useCallback((range, text) => {
     if (!range || !canvasRef.current || !textLayerRef.current) return;
   
     const rects = range.getClientRects();
     const canvasRect = canvasRef.current.getBoundingClientRect();
     
-    // CRITICAL FIX: Use canvas rect as reference, not text layer rect
-    // The text layer has transforms that offset its content
     const highlightRects = [];
   
     for (let i = 0; i < rects.length; i++) {
       const rect = rects[i];
     
-      // Skip zero-width/height rects
       if (rect.width === 0 || rect.height === 0) continue;
-    
+      
+      // Use actual rect dimensions - now accurate after transform fix
       const preciseWidth = rect.right - rect.left;
       
-      // Calculate position relative to the CANVAS, not text layer
       highlightRects.push({
         x: rect.left - canvasRect.left,
         y: rect.top - canvasRect.top,
@@ -647,8 +634,8 @@ function App() {
         disableFontFace: false,
         useSystemFonts: false,
         standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/',
-        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/', // Add this
-        cMapPacked: true, // Add this
+        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/',
+        cMapPacked: true,
       });
       const pdf = await loadingTask.promise;
       setPdfDoc(pdf);
@@ -734,7 +721,7 @@ function App() {
                 key={color.name}
                 onClick={() => {
                   setSelectedColor(color);
-                  setIsHighlighting(true); // Auto-enable highlighter when color selected
+                  setIsHighlighting(true);
                 }}
                 className={`w-8 h-8 border-3 border-black ${selectedColor.name === color.name ? 'ring-4 ring-black ring-offset-1' : ''}`}
                 style={{ backgroundColor: color.hex }}
@@ -773,7 +760,6 @@ function App() {
               </div>
             </div>
             
-            {/* UPDATED CONTAINER: fit-content width to hug the canvas, preventing misalignment */}
             <div 
               className="relative border-3 border-black shadow-nb-xl bg-white mx-auto"
               style={{ width: 'fit-content', height: 'fit-content' }}
@@ -783,7 +769,6 @@ function App() {
                 className={`block ${darkMode ? "invert grayscale contrast-125" : ""}`} 
               />
               
-              {/* TEXT LAYER: Correctly positioned z-index 10 */}
               <div 
                  ref={textLayerRef} 
                  className="textLayer" 
@@ -797,7 +782,6 @@ function App() {
                  }}
               />
               
-              {/* Highlights: Render each rect within the highlight object */}
               {currentHighlights.map(h => (
                 <React.Fragment key={h.id}>
                   {h.rects && h.rects.map((rect, i) => (
@@ -816,7 +800,6 @@ function App() {
                       }} 
                     />
                   ))}
-                  {/* Backward compatibility for old highlights without rects array */}
                   {!h.rects && h.width && (
                     <div 
                       style={{ 
