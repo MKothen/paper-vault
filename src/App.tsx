@@ -280,17 +280,18 @@ function App() {
       if (textLayerRef.current && !isCancelled) {
         const textLayerDiv = textLayerRef.current;
         textLayerDiv.innerHTML = '';
-        
+
         // Use EXACT pixel dimensions - no rounding
         textLayerDiv.style.position = 'absolute';
         textLayerDiv.style.left = '0';
         textLayerDiv.style.top = '0';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
-        textLayerDiv.style.overflow = 'hidden';
-        
+        textLayerDiv.style.transform = 'none'; // Prevent any transforms
+        textLayerDiv.style.transformOrigin = '0 0';
+
         const textContent = await page.getTextContent();
-        
+
         if (pdfjsLib.TextLayer) {
           const textLayer = new pdfjsLib.TextLayer({
             textContentSource: textContent,
@@ -370,7 +371,21 @@ function App() {
     const rects = range.getClientRects();
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const textLayerRect = textLayerRef.current.getBoundingClientRect();
-
+      // ADD THIS LOGGING BLOCK HERE
+    console.log('=== HIGHLIGHT DEBUG ===');
+    console.log('Canvas rect:', {
+      left: canvasRect.left,
+      top: canvasRect.top,
+      width: canvasRect.width,
+      height: canvasRect.height
+    });
+    console.log('Text layer rect:', {
+      left: textLayerRect.left,
+      top: textLayerRect.top,
+      width: textLayerRect.width,
+      height: textLayerRect.height
+    });
+    console.log('Number of selection rects:', rects.length);
     const highlightRects = [];
 
     for (let i = 0; i < rects.length; i++) {
@@ -379,12 +394,13 @@ function App() {
       // Skip zero-width/height rects
       if (rect.width === 0 || rect.height === 0) continue;
     
-      // Calculate position relative to the text layer (not canvas)
-      // This ensures proper alignment since highlights are positioned absolutely within the same container
+      // CRITICAL FIX: Calculate precise width instead of using rect.width
+      const preciseWidth = rect.right - rect.left;
+
       highlightRects.push({
         x: rect.left - textLayerRect.left,
         y: rect.top - textLayerRect.top,
-        width: rect.width,
+        width: preciseWidth,  // ← Changed from rect.width to preciseWidth
         height: rect.height,
       });
     }
@@ -405,6 +421,7 @@ function App() {
       setHistoryIndex(annotationHistory.length);
     }
   }, [currentPage, selectedColor, highlights, postits, saveAnnotations, annotationHistory]);
+
 
 
   const handleTextSelection = useCallback(() => {
@@ -600,10 +617,11 @@ function App() {
     const loadPdf = async () => {
       const loadingTask = pdfjsLib.getDocument({
         url: paper.pdfUrl,
-        // CRITICAL: Disable font substitution to fix width issues
         disableFontFace: false,
         useSystemFonts: false,
-        standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/'
+        standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/',
+        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/cmaps/', // Add this
+        cMapPacked: true, // Add this
       });
       const pdf = await loadingTask.promise;
       setPdfDoc(pdf);

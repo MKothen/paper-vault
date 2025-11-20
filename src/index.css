@@ -57,6 +57,8 @@
   white-space: pre;
   cursor: text;
   transform-origin: 0% 0%;
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
 }
 
 .textLayer ::selection {
