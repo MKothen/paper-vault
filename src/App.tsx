@@ -7,11 +7,14 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Save, Search, FileText, StickyNote, Download, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Undo2, Clipboard, Moon, Sun, Sidebar as SidebarIcon, Copy, Timer } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
-import * as pdfjsLib from 'pdfjs-dist';
 
 // --- CONFIGURATION ---
+// Standard imports for pdfjs-dist v4.x
+import { getDocument, GlobalWorkerOptions, renderTextLayer } from 'pdfjs-dist';
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+
+// Set worker manually to ensure version match
+GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const APP_PASSWORD = "science-rocks";
 
@@ -125,7 +128,7 @@ function App() {
     }
   }, [selectedPaper]);
 
-  // --- ROBUST PDF RENDERING ---
+  // --- ROBUST PDF RENDERING (Fixed for v4.x) ---
   useEffect(() => {
     if (!pdfDoc || !currentPage || !canvasRef.current) return;
 
@@ -158,22 +161,23 @@ function App() {
       renderTask = page.render({ canvasContext: context, viewport });
       await renderTask.promise;
 
-      // 3. Text Layer Rendering (Perfect Alignment)
+      // 3. Text Layer Rendering (Updated for v4.x API)
       if (textLayerRef.current) {
         const textContent = await page.getTextContent();
         textLayerRef.current.innerHTML = '';
         
-        // Match CSS dimensions exactly
+        // Match CSS dimensions exactly to the viewport (logical pixels)
         textLayerRef.current.style.height = `${viewport.height}px`;
         textLayerRef.current.style.width = `${viewport.width}px`;
-        textLayerRef.current.style.setProperty('--scale-factor', scale); // Helpful for custom CSS if needed
+        textLayerRef.current.style.setProperty('--scale-factor', scale);
 
-        pdfjsLib.renderTextLayer({
+        // Use the standalone renderTextLayer function
+        await renderTextLayer({
           textContentSource: textContent,
           container: textLayerRef.current,
           viewport: viewport,
           textDivs: []
-        });
+        }).promise;
       }
     };
 
@@ -268,8 +272,6 @@ function App() {
   const handleFileUpload = async (file) => {
     setIsUploading(true);
     try {
-       // Simple mock upload to Firestore logic for now
-       // In real app: uploadBytes(ref(storage, ...), file)
        const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
        await uploadBytes(fileRef, file);
        const url = await getDownloadURL(fileRef);
@@ -402,7 +404,7 @@ function App() {
            <div className={`flex-1 overflow-auto p-8 flex justify-center bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px] ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
               <div 
                 className="relative shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] border-4 border-black bg-white h-fit"
-                style={{ position: 'relative' }} // Ensure container is positioned
+                style={{ position: 'relative' }}
               >
                  {/* Canvas */}
                  <canvas 
@@ -444,7 +446,7 @@ function App() {
                    <DraggablePostit 
                      key={p.id} 
                      data={p} 
-                     scale={scale} // Pass scale to handle interactions correctly
+                     scale={scale} 
                      onUpdate={updatePostit} 
                      onDelete={deleteAnnotation} 
                      darkMode={darkMode}
@@ -505,7 +507,7 @@ function App() {
     );
   }
 
-  // --- RENDER: GRAPH VIEW (Same as before) ---
+  // --- RENDER: GRAPH VIEW (Unchanged) ---
   if (activeView === 'graph') {
     return (
       <div className="h-screen flex flex-col bg-nb-gray">
@@ -607,7 +609,7 @@ function App() {
                                          <span>{paper.authors?.split(',')[0] || 'Unknown'}</span>
                                          <span>{paper.year}</span>
                                       </div>
-                                      <button onClick={() => { setSelectedPaper(paper); pdfjsLib.getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
+                                      <button onClick={() => { setSelectedPaper(paper); getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
                                         <Eye size={16} /> Read Paper
                                       </button>
                                    </div>
