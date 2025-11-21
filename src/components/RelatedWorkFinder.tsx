@@ -22,26 +22,31 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
   const loadRelated = async () => {
     setLoading(true);
     const id = currentPaper.semanticScholarId || `DOI:${currentPaper.doi}`;
-    // Fetch citations (papers that cite this one) as they are often "related work"
-    const data = await fetchRelatedPapers(id, 10);
-    // Transform API data
-    const cleanData = data.map((item: any) => ({
-      paperId: item.paperId,
-      title: item.title,
-      authors: item.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
-      year: item.year,
-      abstract: item.abstract,
-      venue: item.venue,
-      isImp: false
-    }));
-    setRelated(cleanData);
+    // Fetch papers that cite this one, and sort by citation count
+    const rawData = await fetchRelatedPapers(id, 100);
+    // Most S2 citation endpoints nest the cited/citing paper under 'citingPaper', and may not contain citation counts unless extra fields are requested.
+    const cleanData = rawData.map((item: any) => {
+      const citing = item.citingPaper || item;
+      return {
+        paperId: citing.paperId,
+        title: citing.title,
+        authors: citing.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
+        year: citing.year,
+        abstract: citing.abstract,
+        venue: citing.venue,
+        citationCount: citing.citationCount || 0
+      };
+    }).filter(p => p.paperId && p.title);
+    // Sort by citation count
+    cleanData.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
+    setRelated(cleanData.slice(0, 20));
     setLoading(false);
   };
 
   return (
     <div className="bg-white border-4 border-black p-4 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
-        <h3 className="font-black uppercase">Related Work</h3>
+        <h3 className="font-black uppercase">Most-Cited Papers That Cite This Work</h3>
         <button onClick={loadRelated} className="p-1 hover:bg-gray-100 rounded">
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -50,14 +55,15 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
         {loading ? (
           <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
         ) : related.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center italic">No related papers found.</p>
+          <p className="text-gray-500 text-sm text-center italic">No citing papers found.</p>
         ) : (
           related.map((paper, idx) => (
             <div key={paper.paperId || paper.title || idx} className="border-2 border-black p-3 hover:bg-gray-50 transition-colors">
               <h4 className="font-bold text-sm leading-tight mb-1">{paper.title}</h4>
-              <div className="text-xs text-gray-600 mb-2 flex justify-between">
+              <div className="text-xs text-gray-600 mb-2 flex items-center justify-between">
                 <span>{paper.year}</span>
-                <span className="truncate max-w-[150px]">{paper.authors}</span>
+                <span className="truncate max-w-[120px]">{paper.authors}</span>
+                <span className="ml-2 text-gray-400">{paper.citationCount || 0} cites</span>
               </div>
               <div className="flex gap-2 mt-2">
                 <button 
