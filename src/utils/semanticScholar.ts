@@ -1,4 +1,4 @@
-import { CitationData } from '../types';
+import type { CitationData } from '../types';
 
 const SEMANTIC_SCHOLAR_API = 'https://api.semanticscholar.org/graph/v1';
 

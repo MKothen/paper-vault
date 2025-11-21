@@ -1,7 +1,5 @@
 // src/components/VirtualKanbanBoard.tsx
 import React, { useMemo } from 'react';
-// FIX: Use standard named imports. This satisfies TypeScript.
-// We will fix the runtime error by updating vite.config.ts below.
 import { FixedSizeList as List, areEqual } from 'react-window';
 import type { Paper } from '../types';
 import { Eye, Trash2, Pencil, Star } from 'lucide-react';
@@ -94,6 +92,11 @@ export function VirtualKanbanBoard({ papers, onStatusChange, onRead, onEdit, onD
     );
   };
 
+  // Safety check to ensure List is defined before rendering
+  if (!List) {
+    return <div className="p-8 text-center font-bold text-red-500">Error: Virtual List component failed to load. Please restart the dev server.</div>;
+  }
+
   return (
     <div className="flex-1 h-full overflow-hidden bg-nb-gray p-4">
       <DragDropContext onDragEnd={onDragEnd}>
@@ -124,7 +127,7 @@ export function VirtualKanbanBoard({ papers, onStatusChange, onRead, onEdit, onD
                 >
                   {(provided) => (
                     <List
-                      height={600} // Ideally dynamic, fixed for stability
+                      height={600} 
                       itemCount={items.length}
                       itemSize={160}
                       width="100%"
