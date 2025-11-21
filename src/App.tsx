@@ -9,9 +9,12 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
 
 // --- CONFIGURATION ---
-// FIXED IMPORTS: Use namespace import for robustness
-import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLibModule from 'pdfjs-dist';
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+
+// --- VITE/PDFJS INTEROP FIX ---
+// This handles the case where Vite serves the library inside a .default property
+const pdfjsLib = pdfjsLibModule.default || pdfjsLibModule;
 
 // Configure worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -161,23 +164,27 @@ function App() {
       renderTask = page.render({ canvasContext: context, viewport });
       await renderTask.promise;
 
-      // 3. Text Layer Rendering
+      // 3. Text Layer Rendering (Using unwrapped pdfjsLib)
       if (textLayerRef.current) {
         const textContent = await page.getTextContent();
         textLayerRef.current.innerHTML = '';
         
-        // Match CSS dimensions exactly
+        // Match CSS dimensions exactly to the viewport
         textLayerRef.current.style.height = `${viewport.height}px`;
         textLayerRef.current.style.width = `${viewport.width}px`;
         textLayerRef.current.style.setProperty('--scale-factor', scale);
 
-        // Fix: Access renderTextLayer via the pdfjsLib object
-        await pdfjsLib.renderTextLayer({
-          textContentSource: textContent,
-          container: textLayerRef.current,
-          viewport: viewport,
-          textDivs: []
-        }).promise;
+        // Use the safe reference
+        if (pdfjsLib.renderTextLayer) {
+            await pdfjsLib.renderTextLayer({
+              textContentSource: textContent,
+              container: textLayerRef.current,
+              viewport: viewport,
+              textDivs: []
+            }).promise;
+        } else {
+            console.error("Critical Error: renderTextLayer missing from pdfjsLib", pdfjsLib);
+        }
       }
     };
 
@@ -212,11 +219,10 @@ function App() {
     const rect = range.getBoundingClientRect();
     const canvasRect = canvasRef.current.getBoundingClientRect();
 
-    // ROBUSTNESS: Normalize coordinates to PDF scale (1.0)
+    // Normalize coordinates
     const newHighlight = {
       id: Date.now(),
       page: currentPage,
-      // Divide by current scale to save normalized coordinate
       x: (rect.left - canvasRect.left) / scale,
       y: (rect.top - canvasRect.top) / scale,
       width: rect.width / scale,
@@ -233,7 +239,6 @@ function App() {
   };
 
   const addPostit = (text = "New Note") => {
-    // Normalize post-it position too
     const jitterX = (Math.random() * 40 - 20) / scale;
     const jitterY = (Math.random() * 40 - 20) / scale;
     
@@ -608,7 +613,9 @@ function App() {
                                          <span>{paper.authors?.split(',')[0] || 'Unknown'}</span>
                                          <span>{paper.year}</span>
                                       </div>
-                                      <button onClick={() => { setSelectedPaper(paper); pdfjsLib.getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
+                                      <button onClick={() => { setSelectedPaper(paper); 
+                                        // Use the safe pdfjsLib reference here too
+                                        pdfjsLib.getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
                                         <Eye size={16} /> Read Paper
                                       </button>
                                    </div>
