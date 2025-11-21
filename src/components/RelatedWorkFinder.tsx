@@ -24,7 +24,6 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
     const id = currentPaper.semanticScholarId || `DOI:${currentPaper.doi}`;
     // Fetch citations (papers that cite this one) as they are often "related work"
     const data = await fetchRelatedPapers(id, 10);
-    
     // Transform API data
     const cleanData = data.map((item: any) => ({
       paperId: item.paperId,
@@ -35,7 +34,6 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       venue: item.venue,
       isImp: false
     }));
-    
     setRelated(cleanData);
     setLoading(false);
   };
@@ -48,21 +46,19 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
-
       <div className="flex-1 overflow-y-auto space-y-3">
         {loading ? (
           <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
         ) : related.length === 0 ? (
           <p className="text-gray-500 text-sm text-center italic">No related papers found.</p>
         ) : (
-          related.map((paper) => (
-            <div key={paper.paperId} className="border-2 border-black p-3 hover:bg-gray-50 transition-colors">
+          related.map((paper, idx) => (
+            <div key={paper.paperId || paper.title || idx} className="border-2 border-black p-3 hover:bg-gray-50 transition-colors">
               <h4 className="font-bold text-sm leading-tight mb-1">{paper.title}</h4>
               <div className="text-xs text-gray-600 mb-2 flex justify-between">
                 <span>{paper.year}</span>
                 <span className="truncate max-w-[150px]">{paper.authors}</span>
               </div>
-              
               <div className="flex gap-2 mt-2">
                 <button 
                   onClick={() => onImport({
