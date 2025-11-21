@@ -17,8 +17,9 @@ export async function fetchCitationData(doi: string): Promise<CitationData | nul
 
 export async function fetchRelatedPapers(paperId: string, limit: number = 10) {
   try {
+    // Explicitly request citationCount for the citing papers
     const response = await fetch(
-      `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/citations?fields=paperId,title,authors,year,abstract&limit=${limit}`
+      `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/citations?fields=citingPaper.paperId,citingPaper.title,citingPaper.authors,citingPaper.year,citingPaper.abstract,citingPaper.venue,citingPaper.citationCount&limit=${limit}`
     );
     if (!response.ok) return [];
     const data = await response.json();
