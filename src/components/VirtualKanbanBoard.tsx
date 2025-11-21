@@ -61,37 +61,6 @@ export function VirtualKanbanBoard({ papers, onStatusChange, onRead, onEdit, onD
     onStatusChange(result.draggableId, result.destination.droppableId);
   };
 
-  // Custom row renderer for react-window that incorporates Drag and Drop
-  const Row = ({ data, index, style }: any) => {
-    const paper = data[index];
-    return (
-      <Draggable draggableId={paper.id} index={index} key={paper.id}>
-        {(provided) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.draggableProps}
-            {...provided.dragHandleProps}
-            style={{
-              ...style,
-              ...provided.draggableProps.style, // Preserve DnD transform
-              left: Number(style.left) + 8, // Add padding safely
-              top: Number(style.top) + 8,
-              width: `calc(${style.width} - 16px)`
-            }}
-          >
-            <PaperCard 
-                paper={paper} 
-                style={{ height: '100%' }} 
-                onRead={onRead} 
-                onEdit={onEdit} 
-                onDelete={onDelete} 
-            />
-          </div>
-        )}
-      </Draggable>
-    );
-  };
-
   // Safety check to ensure List is defined before rendering
   if (!List) {
     return <div className="p-8 text-center font-bold text-red-500">Error: Virtual List component failed to load. Please restart the dev server.</div>;
@@ -108,7 +77,7 @@ export function VirtualKanbanBoard({ papers, onStatusChange, onRead, onEdit, onD
                 <span className="bg-black text-white px-2 py-0.5 rounded-full text-xs">{items.length}</span>
               </div>
               
-              <div className="flex-1 relative">
+              <div className="flex-1 relative overflow-auto">
                 <Droppable 
                     droppableId={id} 
                     mode="virtual"
@@ -125,18 +94,48 @@ export function VirtualKanbanBoard({ papers, onStatusChange, onRead, onEdit, onD
                         </div>
                     )}
                 >
-                  {(provided) => (
-                    <List
-                      height={600} 
-                      itemCount={items.length}
-                      itemSize={160}
-                      width="100%"
-                      itemData={items}
-                      outerRef={provided.innerRef}
-                      className="scrollbar-hide"
-                    >
-                      {Row}
-                    </List>
+                  {(provided, snapshot) => (
+                    <div ref={provided.innerRef} className="h-full">
+                      <List
+                        height={600} 
+                        itemCount={items.length}
+                        itemSize={160}
+                        width="100%"
+                        itemData={items}
+                        className="scrollbar-hide"
+                      >
+                        {({ data, index, style }) => {
+                          const paper = data[index];
+                          return (
+                            <Draggable draggableId={paper.id} index={index} key={paper.id}>
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  style={{
+                                    ...style,
+                                    ...provided.draggableProps.style,
+                                    left: Number(style.left) + 8,
+                                    top: Number(style.top) + 8,
+                                    width: `calc(${style.width} - 16px)`
+                                  }}
+                                >
+                                  <PaperCard 
+                                      paper={paper} 
+                                      style={{ height: '100%' }} 
+                                      onRead={onRead} 
+                                      onEdit={onEdit} 
+                                      onDelete={onDelete} 
+                                  />
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        }}
+                      </List>
+                      {provided.placeholder}
+                    </div>
                   )}
                 </Droppable>
               </div>
