@@ -8,7 +8,7 @@ import {
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
   Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
-  Info, LayoutGrid, BarChart3, Download 
+  Info, LayoutGrid, BarChart3, Download, FileText, Star
 } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
@@ -17,6 +17,11 @@ import ForceGraph2D from 'react-force-graph-2d';
 import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+
+// --- UTILITY IMPORTS (Ensure these files exist in your ./utils folder) ---
+import { generatePDFThumbnail, extractPDFText, findDuplicatePapers, calculatePDFHash } from './utils/pdfUtils';
+import { fetchSemanticScholarData, parseBibTeX, generateBibTeX, formatCitation } from './utils/citationUtils';
+import { calculateReadingStats, formatReadingTime, getTopItems } from './utils/analyticsUtils';
 
 // Configure Worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -52,7 +57,7 @@ const generateSmartTags = (text) => {
   
   return Object.entries(freq)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
+    .slice(0, 10)
     .map(entry => entry[0].charAt(0).toUpperCase() + entry[0].slice(1));
 };
 
@@ -81,6 +86,13 @@ function App() {
   const [doiInput, setDoiInput] = useState("");
   const [isFetching, setIsFetching] = useState(false);
 
+  // NEW: BibTeX Import State
+  const [bibtexInput, setBibtexInput] = useState("");
+  const [showBibtexModal, setShowBibtexModal] = useState(false);
+
+  // NEW: Duplicate Detection State
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+
   // Manual Form State
   const [newTitle, setNewTitle] = useState("");
   const [newLink, setNewLink] = useState("");
@@ -90,6 +102,9 @@ function App() {
   const [newAuthors, setNewAuthors] = useState("");
   const [newYear, setNewYear] = useState("");
   const [newVenue, setNewVenue] = useState("");
+  const [newMethods, setNewMethods] = useState([]);
+  const [newOrganisms, setNewOrganisms] = useState([]);
+  const [newRating, setNewRating] = useState(0);
 
   // Reader State
   const [numPages, setNumPages] = useState(null);
@@ -107,6 +122,9 @@ function App() {
   
   // Graph Ref
   const graphRef = useRef();
+
+  // Reading stats
+  const [readingStats, setReadingStats] = useState(null);
 
   // --- NOTIFICATION STATE ---
   const [toasts, setToasts] = useState([]); 
@@ -132,6 +150,12 @@ function App() {
         'reading': loaded.filter(p => p.status === 'reading'),
         'read': loaded.filter(p => p.status === 'read')
       });
+      
+      // Calculate reading stats if utility is available
+      if (typeof calculateReadingStats === 'function') {
+        const stats = calculateReadingStats(loaded, []);
+        setReadingStats(stats);
+      }
     });
     return () => unsubscribe();
   }, [user]);
@@ -160,14 +184,37 @@ function App() {
   // --- GRAPH PHYSICS ---
   useEffect(() => {
     if (activeView === 'graph' && graphRef.current) {
-      // Disable spring forces for "cord" effect
       graphRef.current.d3Force('link').strength(0);
       graphRef.current.d3Force('center', null);
       graphRef.current.d3Force('charge').strength(-20);
     }
   }, [activeView, papers]);
 
-  // --- SMART METADATA ---
+  // --- NEW: BibTeX Import Handler ---
+  const handleBibtexImport = () => {
+    try {
+      const parsed = parseBibTeX(bibtexInput);
+      if (parsed) {
+        setNewTitle(parsed.title || "");
+        setNewAuthors(parsed.authors || "");
+        setNewYear(parsed.year || "");
+        setNewVenue(parsed.venue || "");
+        setNewAbstract(parsed.abstract || "");
+        setNewLink(parsed.link || "");
+        setNewTags(parsed.tags || []);
+        setDoiInput(parsed.doi || "");
+        addToast("BibTeX imported successfully!", "success");
+        setShowBibtexModal(false);
+        setBibtexInput("");
+      } else {
+        addToast("Failed to parse BibTeX. Please check format.", "error");
+      }
+    } catch (error) {
+      addToast("Error parsing BibTeX", "error");
+    }
+  };
+
+  // --- ENHANCED: Smart Metadata Extraction with Citation Fetching ---
   const extractMetadata = async (file) => {
     const arrayBuffer = await file.arrayBuffer();
     const loadingTask = pdfjs.getDocument(arrayBuffer);
@@ -199,33 +246,47 @@ function App() {
     });
 
     const doiMatch = fullText.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
+    let pdfHash = "";
     
+    // NEW: Calculate PDF hash for duplicate detection
+    try {
+      if (typeof calculatePDFHash === 'function') {
+        pdfHash = await calculatePDFHash(file);
+      }
+    } catch (e) {
+      console.warn("Could not calculate PDF hash", e);
+    }
+    
+    // NEW: Fetch citation data from Semantic Scholar
     if (doiMatch) {
         const cleanDoi = doiMatch[0];
         addToast(`DOI detected: ${cleanDoi}`, "info");
         try {
-            const response = await fetch(`https://api.semanticscholar.org/graph/v1/paper/DOI:${cleanDoi}?fields=title,url,abstract,authors,year,venue`);
-            const apiData = await response.json();
-            if (!apiData.error) {
-                addToast("Metadata retrieved from DOI!", "success");
+            const citationData = await fetchSemanticScholarData(cleanDoi, 'DOI');
+            if (citationData && !citationData.error) {
+                addToast("Metadata & citations retrieved!", "success");
                 return {
-                    title: apiData.title,
-                    tags: generateSmartTags(apiData.title + " " + (apiData.abstract || "")),
-                    authors: apiData.authors ? apiData.authors.map(a => a.name).slice(0, 3).join(", ") : authorCandidate,
-                    abstract: apiData.abstract || "",
-                    year: apiData.year ? apiData.year.toString() : (new Date().getFullYear().toString()),
-                    venue: apiData.venue || "",
+                    title: citationData.title,
+                    tags: generateSmartTags(citationData.title),
+                    authors: "",
+                    abstract: "",
+                    year: new Date().getFullYear().toString(),
+                    venue: "",
+                    doi: cleanDoi,
+                    citationCount: citationData.citationCount || 0,
+                    semanticScholarId: citationData.paperId,
+                    pdfHash: pdfHash,
                     source: 'doi'
                 };
             } else {
-                addToast("DOI found but metadata lookup failed. Using text extraction.", "warning");
+                addToast("DOI found but lookup failed. Using text extraction.", "warning");
             }
         } catch (e) {
             console.warn("DOI fetch failed", e);
             addToast("DOI lookup error. Using text extraction.", "warning");
         }
     } else {
-       addToast("No DOI found in text. Using text analysis.", "info");
+       addToast("No DOI found. Using text analysis.", "info");
     }
 
     if (titleCandidate.length < 5) titleCandidate = file.name.replace('.pdf', '');
@@ -238,11 +299,12 @@ function App() {
       abstract: "",
       year: new Date().getFullYear().toString(),
       venue: "",
+      pdfHash: pdfHash,
       source: 'local'
     };
   };
 
-  // --- BATCH UPLOAD ---
+  // --- BATCH UPLOAD with Duplicate Detection ---
   const handleDrop = async (e) => {
     e.preventDefault();
     setIsDraggingFile(false);
@@ -257,9 +319,29 @@ function App() {
 
   const processFile = async (file) => {
       const metadata = await extractMetadata(file);
+      
+      // NEW: Check for duplicates
+      if (typeof findDuplicatePapers === 'function') {
+        const duplicates = findDuplicatePapers(metadata, papers);
+        if (duplicates.length > 0) {
+          addToast(`⚠️ Possible duplicate: "${duplicates[0].title}"`, "warning");
+        }
+      }
+      
       const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
       await uploadBytes(fileRef, file);
       const url = await getDownloadURL(fileRef);
+      
+      // NEW: Generate thumbnail
+      let thumbnailUrl = "";
+      try {
+        if (typeof generatePDFThumbnail === 'function') {
+          thumbnailUrl = await generatePDFThumbnail(url);
+        }
+      } catch (e) {
+        console.warn("Could not generate thumbnail", e);
+      }
+      
       await addDoc(collection(db, "papers"), {
         userId: user.uid,
         title: metadata.title,
@@ -273,7 +355,12 @@ function App() {
         venue: metadata.venue,
         notes: "",
         pdfUrl: url,
-        createdAt: Date.now()
+        doi: metadata.doi || "",
+        citationCount: metadata.citationCount || 0,
+        pdfHash: metadata.pdfHash || "",
+        thumbnailUrl: thumbnailUrl,
+        createdAt: Date.now(),
+        addedDate: Date.now()
       });
       return metadata;
   };
@@ -304,27 +391,23 @@ function App() {
     }, 1000);
   };
 
-  // --- MANUAL FORM ---
+  // --- ENHANCED: Manual Form with Citation Fetching ---
   const fetchDoi = async () => {
     if (!doiInput) { addToast("Please paste a DOI first.", "error"); return; }
     setIsFetching(true);
     try {
       const cleanDoi = doiInput.replace("https://doi.org/", "").trim();
-      const response = await fetch(`https://api.semanticscholar.org/graph/v1/paper/DOI:${cleanDoi}?fields=title,url,abstract,authors,year,venue`);
-      const data = await response.json();
-      if (data.error) {
-        addToast("Could not find paper with that DOI.", "error");
+      const citationData = await fetchSemanticScholarData(cleanDoi, 'DOI');
+      if (citationData && !citationData.error) {
+        setNewTitle(citationData.title);
+        setNewLink(`https://doi.org/${cleanDoi}`);
+        setNewAbstract("");
+        setNewYear(new Date().getFullYear().toString());
+        setNewVenue("");
+        setNewTags(generateSmartTags(citationData.title));
+        addToast(`Metadata fetched! Citation count: ${citationData.citationCount}`, "success");
       } else {
-        setNewTitle(data.title);
-        setNewLink(data.url || `https://doi.org/${cleanDoi}`);
-        setNewAbstract(data.abstract);
-        setNewYear(data.year ? data.year.toString() : "");
-        setNewVenue(data.venue);
-        if(data.authors && data.authors.length > 0) {
-          setNewAuthors(data.authors.map(a => a.name).slice(0, 3).join(", ") + (data.authors.length > 3 ? " et al." : ""));
-        }
-        setNewTags(generateSmartTags(data.title + " " + data.abstract));
-        addToast("Metadata fetched successfully!", "success");
+        addToast("Could not find paper with that DOI.", "error");
       }
     } catch (error) {
       addToast("Failed to fetch DOI. Check connection.", "error");
@@ -335,11 +418,46 @@ function App() {
   const addPaperManual = async (e) => {
     e.preventDefault();
     if (!newTitle) { addToast("Please enter a title.", "error"); return; }
+    
+    // Check for duplicates
+    if (typeof findDuplicatePapers === 'function') {
+        const duplicates = findDuplicatePapers({ title: newTitle }, papers);
+        if (duplicates.length > 0) {
+        addToast(`⚠️ Similar paper exists: "${duplicates[0].title}"`, "warning");
+        }
+    }
+    
     await addDoc(collection(db, "papers"), {
-      userId: user.uid, title: newTitle, link: newLink, tags: newTags, color: newColor, status: "to-read", abstract: newAbstract, authors: newAuthors, year: newYear, venue: newVenue, notes: "", pdfUrl: "", createdAt: Date.now()
+      userId: user.uid, 
+      title: newTitle, 
+      link: newLink, 
+      tags: newTags, 
+      color: newColor, 
+      status: "to-read", 
+      abstract: newAbstract, 
+      authors: newAuthors, 
+      year: newYear, 
+      venue: newVenue, 
+      notes: "", 
+      pdfUrl: "", 
+      methods: newMethods,
+      organisms: newOrganisms,
+      rating: newRating,
+      createdAt: Date.now(),
+      addedDate: Date.now()
     });
     addToast("Paper added manually.", "success");
-    setNewTitle(""); setNewLink(""); setNewTags([]); setNewAbstract(""); setNewAuthors(""); setNewYear(""); setNewVenue(""); setDoiInput("");
+    setNewTitle(""); 
+    setNewLink(""); 
+    setNewTags([]); 
+    setNewAbstract(""); 
+    setNewAuthors(""); 
+    setNewYear(""); 
+    setNewVenue(""); 
+    setNewMethods([]);
+    setNewOrganisms([]);
+    setNewRating(0);
+    setDoiInput("");
   };
 
   const deletePaper = (id) => {
@@ -354,7 +472,7 @@ function App() {
     });
   };
 
-  // --- READER HELPERS ---
+  // --- ANNOTATION HELPERS (From Backup) ---
   const handlePageClick = () => {
     if (!isHighlightMode) return;
     const selection = window.getSelection();
@@ -371,7 +489,7 @@ function App() {
       height: rect.height / scale
     }));
     if (normalizedRects.length === 0) return;
-    const newHighlight = { id: Date.now(), page: pageNumber, rects: normalizedRects, color: selectedColor.alpha, text: selection.toString() };
+    const newHighlight = { id: Date.now(), page: pageNumber, rects: normalizedRects, color: selectedColor.alpha, text: selection.toString(), createdAt: Date.now() };
     const newHighlights = [...highlights, newHighlight];
     setHighlights(newHighlights);
     localStorage.setItem(`highlights-${selectedPaper.id}`, JSON.stringify(newHighlights));
@@ -381,7 +499,7 @@ function App() {
   const addPostit = (text = "Double click to edit...") => {
     const jitterX = (Math.random() * 40 - 20);
     const jitterY = (Math.random() * 40 - 20);
-    const newPostit = { id: Date.now(), page: pageNumber, x: 100 + jitterX, y: 100 + jitterY, text: text, color: COLORS[Math.floor(Math.random() * COLORS.length)] };
+    const newPostit = { id: Date.now(), page: pageNumber, x: 100 + jitterX, y: 100 + jitterY, text: text, color: COLORS[Math.floor(Math.random() * COLORS.length)], createdAt: Date.now() };
     const newPostits = [...postits, newPostit];
     setPostits(newPostits);
     localStorage.setItem(`postits-${selectedPaper.id}`, JSON.stringify(newPostits));
@@ -416,7 +534,7 @@ function App() {
     return p.title.toLowerCase().includes(q) || p.tags?.some(t => t.toLowerCase().includes(q));
   });
 
-  // --- GRAPH SETUP ---
+  // --- GRAPH DATA & RENDERING (Restored from Backup) ---
   const graphData = useMemo(() => {
     const nodes = papers.map(p => ({ 
         id: p.id, 
@@ -433,42 +551,32 @@ function App() {
     return { nodes, links };
   }, [papers]);
 
-  // 1. NODE RENDERER: Draw the Sticky Note Body ONLY
   const nodeCanvasObject = useCallback((node, ctx, globalScale) => {
     const label = node.label || '';
     const fontSize = 6; 
     ctx.font = `700 ${fontSize}px "Space Grotesk", sans-serif`;
-    
     const width = 60;
     const height = 60;
     const pinX = node.x;
     const pinY = node.y;
-
-    // Shadow
     ctx.shadowColor = "rgba(0, 0, 0, 0.4)";
     ctx.shadowBlur = 6;
     ctx.shadowOffsetX = 3;
     ctx.shadowOffsetY = 3;
-
-    // Post-it Body
     ctx.fillStyle = node.color || '#fef08a';
     const rotate = (node.id.charCodeAt(0) % 10 - 5) * (Math.PI / 180); 
     ctx.save();
     ctx.translate(pinX, pinY);
     ctx.rotate(rotate);
     ctx.fillRect(-width / 2, 5, width, height); 
-    
-    // Text Rendering (Stationary on note)
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#1f2937';
     ctx.shadowColor = "transparent"; 
-    
     const words = label.split(' ');
     let line = '';
     let lineY = 12; 
     const lineHeight = fontSize * 1.1;
-    
     for(let n = 0; n < words.length; n++) {
       const testLine = line + words[n] + ' ';
       const metrics = ctx.measureText(testLine);
@@ -485,12 +593,9 @@ function App() {
     ctx.restore();
   }, []);
 
-  // 2. FRAME POST RENDERER: Draw Cords and Pins ON TOP of everything
   const onRenderFramePost = useCallback((ctx, globalScale) => {
     if (!graphRef.current || typeof graphRef.current.graphData !== 'function') return;
     const { nodes, links } = graphRef.current.graphData();
-
-    // A. Draw Cords
     ctx.beginPath();
     links.forEach(link => {
         const source = typeof link.source === 'object' ? link.source : nodes.find(n => n.id === link.source);
@@ -503,22 +608,14 @@ function App() {
     ctx.strokeStyle = "#4b5563"; 
     ctx.lineWidth = 2; 
     ctx.stroke();
-
-    // B. Draw Pins
     nodes.forEach(node => {
         if (!node.x) return;
         const pinX = node.x;
         const pinY = node.y;
-        
-        // Pin Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.beginPath(); ctx.arc(pinX + 1, pinY + 1, 2.5, 0, 2 * Math.PI, false); ctx.fill();
-        
-        // Pin Head
         ctx.fillStyle = '#ef4444'; 
         ctx.beginPath(); ctx.arc(pinX, pinY, 2.5, 0, 2 * Math.PI, false); ctx.fill();
-        
-        // Pin Highlight
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
         ctx.beginPath(); ctx.arc(pinX - 0.5, pinY - 0.5, 1, 0, 2 * Math.PI, false); ctx.fill();
     });
@@ -535,7 +632,6 @@ function App() {
           node.fx = col * spacing - (cols * spacing) / 2;
           node.fy = row * spacing - (nodes.length / cols * spacing) / 2;
       });
-      // Re-heat simulation a tiny bit to update positions
       graphRef.current.d3ReheatSimulation();
   };
 
@@ -586,6 +682,24 @@ function App() {
            </div>
         </div>
       )}
+      {showBibtexModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+           <div className="bg-white border-4 border-black shadow-nb p-8 max-w-2xl w-full relative">
+              <button onClick={() => setShowBibtexModal(false)} className="absolute top-4 right-4"><X size={32} strokeWidth={3}/></button>
+              <h2 className="text-2xl font-black uppercase mb-4">Import from BibTeX</h2>
+              <textarea 
+                className="nb-input w-full h-64 font-mono text-sm" 
+                placeholder="Paste your BibTeX entry here...\n\n@article{example2023,\n  title={Example Title},\n  author={Author Name},\n  year={2023}\n}"
+                value={bibtexInput}
+                onChange={e => setBibtexInput(e.target.value)}
+              />
+              <div className="flex gap-4 mt-4">
+                 <button onClick={() => setShowBibtexModal(false)} className="flex-1 nb-button bg-white">Cancel</button>
+                 <button onClick={handleBibtexImport} className="flex-1 nb-button bg-nb-lime"><FileText className="inline mr-2" size={16}/>Import</button>
+              </div>
+           </div>
+        </div>
+      )}
       {renderModal()}
     </>
   );
@@ -594,7 +708,60 @@ function App() {
   if (loading) return <div className="h-screen flex items-center justify-center bg-nb-gray"><Loader2 className="animate-spin w-16 h-16" /></div>;
   if (!user) return <div className="min-h-screen flex items-center justify-center bg-nb-cyan p-4"><div className="bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-10 max-w-md w-full text-center"><BookOpen className="w-20 h-20 mx-auto mb-6" strokeWidth={3}/><h1 className="text-5xl font-black uppercase mb-2 tracking-tighter">Paper Vault</h1><button onClick={signInWithGoogle} className="w-full border-4 border-black bg-nb-pink p-4 font-black flex items-center justify-center gap-3 text-lg hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"><User strokeWidth={3} /> ENTER WITH GOOGLE</button></div></div>;
 
-  // --- READER VIEW ---
+  // --- ANALYTICS VIEW (New Feature) ---
+  if (activeView === 'analytics' && readingStats) {
+    return (
+      <div className="h-screen flex flex-col bg-nb-gray">
+        <SharedUI />
+        <div className="bg-white border-b-4 border-black p-4 flex justify-between items-center">
+          <button onClick={() => setActiveView('library')} className="nb-button flex gap-2 text-black"><ChevronLeft /> Back</button>
+          <h1 className="text-3xl font-black uppercase">Reading Analytics</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="nb-card p-6 bg-nb-yellow">
+              <div className="text-4xl font-black mb-2">{readingStats.papersReadTotal}</div>
+              <div className="text-sm font-bold uppercase">Papers Read</div>
+            </div>
+            <div className="nb-card p-6 bg-nb-cyan">
+              <div className="text-4xl font-black mb-2">{readingStats.currentStreak}</div>
+              <div className="text-sm font-bold uppercase">Day Streak 🔥</div>
+            </div>
+            <div className="nb-card p-6 bg-nb-pink">
+              <div className="text-4xl font-black mb-2">{formatReadingTime ? formatReadingTime(readingStats.totalReadingTime) : readingStats.totalReadingTime}</div>
+              <div className="text-sm font-bold uppercase">Total Reading Time</div>
+            </div>
+          </div>
+          
+          <div className="nb-card p-6 mb-6">
+            <h2 className="text-2xl font-black uppercase mb-4">Top Tags</h2>
+            <div className="flex flex-wrap gap-2">
+              {getTopItems ? getTopItems(readingStats.tagFrequency, 15).map(({ item, count }) => (
+                <span key={item} className="bg-black text-white px-3 py-1 text-sm font-bold">
+                  {item} ({count})
+                </span>
+              )) : <p>Load utils to see tags</p>}
+            </div>
+          </div>
+          
+          {readingStats.methodFrequency && Object.keys(readingStats.methodFrequency).length > 0 && (
+            <div className="nb-card p-6 mb-6">
+              <h2 className="text-2xl font-black uppercase mb-4">Top Methods</h2>
+              <div className="flex flex-wrap gap-2">
+                {getTopItems ? getTopItems(readingStats.methodFrequency, 10).map(({ item, count }) => (
+                  <span key={item} className="bg-nb-purple text-white px-3 py-1 text-sm font-bold">
+                    {item} ({count})
+                  </span>
+                )) : null}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // --- READER VIEW (Restored) ---
   if (activeView === 'reader' && selectedPaper) {
     return (
       <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900 text-white' : 'bg-nb-yellow'}`}>
@@ -640,7 +807,7 @@ function App() {
     );
   }
 
-  // --- GRAPH VIEW ---
+  // --- GRAPH VIEW (Restored) ---
   if (activeView === 'graph') {
     return (
       <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
@@ -683,7 +850,7 @@ function App() {
     );
   }
 
-  // --- TIMELINE VIEW ---
+  // --- TIMELINE VIEW (Restored) ---
   if (activeView === 'timeline') {
     return (
         <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
@@ -697,13 +864,14 @@ function App() {
     );
   }
 
-  // --- LIBRARY (KANBAN) ---
+  // LIBRARY VIEW with new features
   return (
     <div className="min-h-screen bg-nb-gray flex flex-col font-sans text-black">
       <SharedUI />
       <header className="bg-white border-b-4 border-black p-5 flex justify-between items-center shadow-sm sticky top-0 z-30">
         <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1></div>
         <div className="flex gap-4">
+          <button onClick={() => setActiveView('analytics')} className="nb-button flex gap-2"><BarChart3 strokeWidth={3} /> Analytics</button>
           <button onClick={() => setActiveView('timeline')} className="nb-button flex gap-2"><Clock strokeWidth={3} /> Timeline</button>
           <button onClick={() => setActiveView('graph')} className="nb-button flex gap-2"><Share2 strokeWidth={3} /> Graph</button>
           <button onClick={logout} className="nb-button flex gap-2"><LogOut strokeWidth={3} /> Exit</button>
@@ -740,7 +908,7 @@ function App() {
                     <div className="bg-black text-white p-4 rounded-full shadow-nb"><FileUp size={32} strokeWidth={3} /></div>
                     <div className="text-center">
                        <p className="font-black text-2xl uppercase">Drop PDF Here</p>
-                       <p className="font-bold text-gray-500">Smart Extract: Title, Tags & Metadata</p>
+                       <p className="font-bold text-gray-500">Auto-detect: DOI, Citations, Duplicates</p>
                     </div>
                  </>
                )}
@@ -751,6 +919,7 @@ function App() {
                <div className="flex gap-2">
                   <input value={doiInput} onChange={e => setDoiInput(e.target.value)} className="nb-input" placeholder="Paste DOI to auto-fill..." />
                   <button onClick={fetchDoi} disabled={isFetching} className="nb-button bg-nb-purple flex gap-2">{isFetching ? <Loader2 className="animate-spin"/> : <Wand2/>} Auto-Fill</button>
+                  <button onClick={() => setShowBibtexModal(true)} className="nb-button bg-nb-orange flex gap-2"><FileText size={16}/> BibTeX</button>
                </div>
                <div className="flex gap-2">
                   <input value={newTitle} onChange={e => setNewTitle(e.target.value)} className="nb-input flex-2" placeholder="Title" />
@@ -782,6 +951,9 @@ function App() {
                             <Draggable key={paper.id} draggableId={paper.id} index={index}>
                                {(provided) => (
                                    <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} className={`nb-card p-5 ${paper.color || 'bg-white'} rotate-1 relative cursor-grab active:cursor-grabbing`}>
+                                      {paper.thumbnailUrl && (
+                                        <img src={paper.thumbnailUrl} alt="" className="w-full h-32 object-cover mb-2 border-2 border-black" />
+                                      )}
                                       <div className="flex justify-between items-start mb-2 mt-2">
                                         <h3 className="font-black text-lg leading-tight uppercase line-clamp-3 flex-1">{paper.title}</h3>
                                         <div className="flex flex-col gap-1 ml-2">
@@ -789,6 +961,9 @@ function App() {
                                            <button onClick={() => deletePaper(paper.id)} className="text-red-600"><Trash2 size={16}/></button>
                                         </div>
                                       </div>
+                                      {paper.citationCount > 0 && (
+                                        <div className="text-xs font-bold bg-black text-white px-2 py-1 inline-block mb-2">📚 {paper.citationCount} citations</div>
+                                      )}
                                       <div className="text-xs font-mono font-bold border-t-2 border-black/10 pt-2 mb-2">{paper.authors?.slice(0, 30)}...</div>
                                       {paper.pdfUrl && (
                                         <button onClick={() => { setSelectedPaper(paper); setActiveView('reader'); }} className="nb-button w-full text-sm flex items-center justify-center gap-2 mt-2">
@@ -808,24 +983,33 @@ function App() {
            </div>
         </DragDropContext>
       </div>
-
-      {showMetadataModal && editingPaper && (
-        <PaperDetailsModal 
-            paper={editForm} 
-            onClose={() => setShowMetadataModal(false)} 
-            onSave={async (data) => { await updateDoc(doc(db, "papers", editingPaper.id), data); setShowMetadataModal(false); addToast("Paper updated", "success"); }} 
-            allTags={allUniqueTags} 
-        />
-      )}
     </div>
   );
 }
 
+// Enhanced PaperDetailsModal with new fields
 function PaperDetailsModal({ paper, allTags, onClose, onSave }) {
   const [formData, setFormData] = useState(paper);
+  const [methodInput, setMethodInput] = useState("");
+  const [organismInput, setOrganismInput] = useState("");
+  
+  const addMethod = () => {
+    if (methodInput && !formData.methods?.includes(methodInput)) {
+      setFormData({...formData, methods: [...(formData.methods || []), methodInput]});
+      setMethodInput("");
+    }
+  };
+  
+  const addOrganism = () => {
+    if (organismInput && !formData.organisms?.includes(organismInput)) {
+      setFormData({...formData, organisms: [...(formData.organisms || []), organismInput]});
+      setOrganismInput("");
+    }
+  };
+  
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-       <div className="bg-white border-4 border-black shadow-[16px_16px_0px_0px_rgba(255,255,255,1)] w-full max-w-lg p-8 relative max-h-[90vh] overflow-y-auto">
+       <div className="bg-white border-4 border-black shadow-[16px_16px_0px_0px_rgba(255,255,255,1)] w-full max-w-2xl p-8 relative max-h-[90vh] overflow-y-auto">
           <button onClick={onClose} className="absolute top-4 right-4 hover:rotate-90 transition-transform"><X size={32} strokeWidth={3}/></button>
           <h2 className="text-3xl font-black uppercase mb-6 border-b-4 border-black pb-2">Edit Metadata</h2>
           <div className="space-y-4">
@@ -836,8 +1020,49 @@ function PaperDetailsModal({ paper, allTags, onClose, onSave }) {
                 <input className="nb-input" value={formData.venue || ''} onChange={e => setFormData({...formData, venue: e.target.value})} placeholder="Venue" />
              </div>
              <textarea className="nb-input" rows={4} value={formData.abstract || ''} onChange={e => setFormData({...formData, abstract: e.target.value})} placeholder="Abstract"></textarea>
+             
+             <label className="font-bold block">Rating</label>
+             <div className="flex gap-1">
+               {[1,2,3,4,5].map(star => (
+                 <button key={star} onClick={() => setFormData({...formData, rating: star})} className="text-2xl">
+                   {star <= (formData.rating || 0) ? '⭐' : '☆'}
+                 </button>
+               ))}
+             </div>
+             
              <label className="font-bold block">Tags</label>
              <TagInput tags={formData.tags || []} setTags={(tags) => setFormData({...formData, tags})} allTags={allTags} />
+             
+             <label className="font-bold block">Methods</label>
+             <div className="space-y-2">
+               <div className="flex gap-2 flex-wrap">
+                 {(formData.methods || []).map(m => (
+                   <span key={m} className="bg-nb-purple text-white px-2 py-1 text-xs font-bold flex items-center gap-1">
+                     {m} <button onClick={() => setFormData({...formData, methods: formData.methods.filter(x => x !== m)})}><X size={10}/></button>
+                   </span>
+                 ))}
+               </div>
+               <div className="flex gap-2">
+                 <input className="nb-input py-1 text-sm" value={methodInput} onChange={e => setMethodInput(e.target.value)} placeholder="Add method..." onKeyDown={e => e.key === 'Enter' && addMethod()} />
+                 <button onClick={addMethod} className="nb-button py-1 px-3"><Plus size={14}/></button>
+               </div>
+             </div>
+             
+             <label className="font-bold block">Model Organisms</label>
+             <div className="space-y-2">
+               <div className="flex gap-2 flex-wrap">
+                 {(formData.organisms || []).map(o => (
+                   <span key={o} className="bg-nb-cyan text-white px-2 py-1 text-xs font-bold flex items-center gap-1">
+                     {o} <button onClick={() => setFormData({...formData, organisms: formData.organisms.filter(x => x !== o)})}><X size={10}/></button>
+                   </span>
+                 ))}
+               </div>
+               <div className="flex gap-2">
+                 <input className="nb-input py-1 text-sm" value={organismInput} onChange={e => setOrganismInput(e.target.value)} placeholder="Add organism..." onKeyDown={e => e.key === 'Enter' && addOrganism()} />
+                 <button onClick={addOrganism} className="nb-button py-1 px-3"><Plus size={14}/></button>
+               </div>
+             </div>
+             
              <label className="font-bold block">Color</label>
              <div className="flex gap-2 flex-wrap">
                 {COLORS.map(c => (
