@@ -7,34 +7,57 @@
 @layer base {
   body {
     @apply bg-nb-gray text-black font-sans;
-    /* Dot Pattern Background */
     background-image: radial-gradient(circle, #000000 1px, transparent 1px);
     background-size: 20px 20px;
   }
 }
 
 @layer components {
-  /* The Neo-Brutalist Card Class */
   .nb-card {
     @apply border-3 border-black shadow-nb bg-white transition-all duration-200;
   }
-  
   .nb-card:hover {
     @apply shadow-nb-lg -translate-y-1 -translate-x-1;
   }
-
-  /* The Neo-Brutalist Button */
   .nb-button {
     @apply border-3 border-black shadow-nb bg-white px-4 py-2 font-bold uppercase tracking-wide transition-all active:shadow-nb-active active:translate-x-1 active:translate-y-1 hover:bg-nb-yellow;
   }
-
-  /* The Neo-Brutalist Input */
   .nb-input {
     @apply w-full p-3 border-3 border-black shadow-nb focus:outline-none focus:ring-0 focus:bg-yellow-50 transition-all;
   }
-  
-  /* Post-it Note Look */
   .nb-postit {
     @apply border-3 border-black shadow-nb p-4 text-black transition-transform hover:scale-105 hover:rotate-1;
   }
+}
+
+/* --- ROBUST PDF TEXT LAYER CSS --- */
+/* This ensures text selection aligns perfectly with the canvas */
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.2; /* Set to 0 to hide completely, 0.2 for debug */
+  line-height: 1.0;
+  pointer-events: none; /* Let clicks pass through to canvas/highlights if needed */
+}
+
+.textLayer ::selection {
+  background: rgba(0, 0, 255, 0.2); /* Standard selection color */
+}
+
+.textLayer br {
+  display: none;
+}
+
+.textLayer span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+  pointer-events: auto; /* Re-enable pointer events for text selection */
 }

@@ -26,23 +26,17 @@ const COLORS = [
 ];
 
 const HIGHLIGHT_COLORS = [
-  { name: 'Yellow', hex: '#FFD90F', alpha: 'rgba(255, 217, 15, 0.5)' },
-  { name: 'Green', hex: '#a3e635', alpha: 'rgba(163, 230, 53, 0.5)' },
-  { name: 'Blue', hex: '#22d3ee', alpha: 'rgba(34, 211, 238, 0.5)' },
-  { name: 'Pink', hex: '#FF90E8', alpha: 'rgba(255, 144, 232, 0.5)' },
+  { name: 'Yellow', hex: '#FFD90F', alpha: 'rgba(255, 217, 15, 0.4)' },
+  { name: 'Green', hex: '#a3e635', alpha: 'rgba(163, 230, 53, 0.4)' },
+  { name: 'Blue', hex: '#22d3ee', alpha: 'rgba(34, 211, 238, 0.4)' },
+  { name: 'Pink', hex: '#FF90E8', alpha: 'rgba(255, 144, 232, 0.4)' },
 ];
 
 const NOTE_TEMPLATES = [
-  { label: "KEY FINDING", prefix: "📌 Key Finding: " },
-  { label: "METHOD", prefix: "🔬 Methodology: " },
-  { label: "IDEA", prefix: "💡 Idea: " },
+  { label: "KEY FINDING", prefix: "東 Key Finding: " },
+  { label: "METHOD", prefix: "溌 Methodology: " },
+  { label: "IDEA", prefix: "庁 Idea: " },
 ];
-
-const CITATION_FORMATS = {
-  APA: (paper) => `${paper.authors || 'Unknown'} (${paper.year || 'n.d.'}). ${paper.title}.`,
-  MLA: (paper) => `${paper.authors || 'Unknown'}. "${paper.title}." ${paper.venue || 'N.p.'}, ${paper.year || 'n.d.'}.`,
-  BibTeX: (paper) => `@article{${(paper.authors?.split(' ')[0] || 'unknown').toLowerCase()}${paper.year || ''},\n  title={${paper.title}},\n  author={${paper.authors}},\n  year={${paper.year}}\n}`
-};
 
 const generateSmartTags = (title) => {
   if (!title) return [];
@@ -65,8 +59,6 @@ function App() {
   const [activeView, setActiveView] = useState('library');
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [sortBy, setSortBy] = useState("date");
   
   // Modals & Forms
   const [showMetadataModal, setShowMetadataModal] = useState(false);
@@ -92,11 +84,8 @@ function App() {
   
   // Tools
   const [darkMode, setDarkMode] = useState(false);
-  const [showCitationModal, setShowCitationModal] = useState(false);
-  const [citationFormat, setCitationFormat] = useState("APA");
   const [pomodoroTime, setPomodoroTime] = useState(25 * 60);
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
-  const [searchInPdf, setSearchInPdf] = useState("");
   const pomodoroRef = useRef(null);
 
   // --- DATA FETCHING ---
@@ -136,33 +125,49 @@ function App() {
     }
   }, [selectedPaper]);
 
+  // --- ROBUST PDF RENDERING ---
   useEffect(() => {
     if (!pdfDoc || !currentPage || !canvasRef.current) return;
 
+    let renderTask = null;
+
     const renderPage = async () => {
       const page = await pdfDoc.getPage(currentPage);
+      
+      // 1. Calculate viewport with scale
       const viewport = page.getViewport({ scale });
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
+      // 2. Handle High DPI (Retina) Displays
+      const dpr = window.devicePixelRatio || 1;
+      canvas.height = Math.floor(viewport.height * dpr);
+      canvas.width = Math.floor(viewport.width * dpr);
+      
+      // CSS must match the viewport size exactly
+      canvas.style.height = `${viewport.height}px`;
+      canvas.style.width = `${viewport.width}px`;
+      
+      // Normalize context for DPI
+      context.scale(dpr, dpr);
 
-      // Fill white first for dark mode inversion to work properly
+      // Clear and fill white (needed for dark mode inversion)
       context.fillStyle = '#ffffff';
-      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillRect(0, 0, viewport.width, viewport.height);
 
-      await page.render({ canvasContext: context, viewport }).promise;
+      renderTask = page.render({ canvasContext: context, viewport });
+      await renderTask.promise;
 
-      // TEXT LAYER RENDERING
+      // 3. Text Layer Rendering (Perfect Alignment)
       if (textLayerRef.current) {
         const textContent = await page.getTextContent();
         textLayerRef.current.innerHTML = '';
-        textLayerRef.current.style.width = `${viewport.width}px`;
-        textLayerRef.current.style.height = `${viewport.height}px`;
-        // Key fix: Ensure text layer aligns perfectly with canvas
-        textLayerRef.current.style.setProperty('--scale-factor', scale);
         
+        // Match CSS dimensions exactly
+        textLayerRef.current.style.height = `${viewport.height}px`;
+        textLayerRef.current.style.width = `${viewport.width}px`;
+        textLayerRef.current.style.setProperty('--scale-factor', scale); // Helpful for custom CSS if needed
+
         pdfjsLib.renderTextLayer({
           textContentSource: textContent,
           container: textLayerRef.current,
@@ -171,7 +176,12 @@ function App() {
         });
       }
     };
+
     renderPage();
+
+    return () => {
+      if (renderTask) renderTask.cancel();
+    };
   }, [pdfDoc, currentPage, scale]);
 
   // --- ACTION HANDLERS ---
@@ -198,14 +208,16 @@ function App() {
     const rect = range.getBoundingClientRect();
     const canvasRect = canvasRef.current.getBoundingClientRect();
 
-    // Calculate relative coordinates
+    // ROBUSTNESS: Normalize coordinates to PDF scale (1.0)
+    // This ensures highlights stay in place even when zoom changes
     const newHighlight = {
       id: Date.now(),
       page: currentPage,
-      x: rect.left - canvasRect.left,
-      y: rect.top - canvasRect.top,
-      width: rect.width,
-      height: rect.height,
+      // Divide by current scale to save normalized coordinate
+      x: (rect.left - canvasRect.left) / scale,
+      y: (rect.top - canvasRect.top) / scale,
+      width: rect.width / scale,
+      height: rect.height / scale,
       color: selectedColor.alpha,
       text: selectedText
     };
@@ -218,15 +230,15 @@ function App() {
   };
 
   const addPostit = (text = "New Note") => {
-    // Random jitter to prevent stacking
-    const jitterX = Math.random() * 40 - 20;
-    const jitterY = Math.random() * 40 - 20;
+    // Normalize post-it position too
+    const jitterX = (Math.random() * 40 - 20) / scale;
+    const jitterY = (Math.random() * 40 - 20) / scale;
     
     const newPostit = {
       id: Date.now(),
       page: currentPage,
-      x: 100 + jitterX, 
-      y: 100 + jitterY,
+      x: (100 / scale) + jitterX, 
+      y: (100 / scale) + jitterY,
       text: text,
       color: COLORS[Math.floor(Math.random() * COLORS.length)]
     };
@@ -253,7 +265,30 @@ function App() {
     }
   };
 
-  // Graph Data Generation
+  const handleFileUpload = async (file) => {
+    setIsUploading(true);
+    try {
+       // Simple mock upload to Firestore logic for now
+       // In real app: uploadBytes(ref(storage, ...), file)
+       const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
+       await uploadBytes(fileRef, file);
+       const url = await getDownloadURL(fileRef);
+
+       await addDoc(collection(db, "papers"), {
+          userId: user.uid,
+          title: file.name.replace('.pdf', ''),
+          pdfUrl: url,
+          status: 'to-read',
+          tags: [],
+          color: 'bg-nb-yellow',
+          createdAt: Date.now()
+       });
+    } catch (e) {
+       alert("Upload failed: " + e.message);
+    }
+    setIsUploading(false);
+  };
+
   const graphData = useMemo(() => {
     const nodes = papers.map(p => ({ id: p.id, label: p.title, color: COLORS.find(c => c.class === p.color)?.hex || '#FFD90F' }));
     const links = [];
@@ -365,7 +400,10 @@ function App() {
         {/* PDF Canvas Wrapper */}
         <div className="flex-1 flex overflow-hidden relative">
            <div className={`flex-1 overflow-auto p-8 flex justify-center bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px] ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
-              <div className="relative shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] border-4 border-black bg-white h-fit">
+              <div 
+                className="relative shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] border-4 border-black bg-white h-fit"
+                style={{ position: 'relative' }} // Ensure container is positioned
+              >
                  {/* Canvas */}
                  <canvas 
                    ref={canvasRef} 
@@ -375,31 +413,24 @@ function App() {
                    }} 
                  />
                  
-                 {/* Transparent Text Layer for Selection */}
+                 {/* Robust Text Layer */}
                  <div 
                    ref={textLayerRef} 
-                   className="textLayer absolute top-0 left-0"
-                   style={{
-                     mixBlendMode: 'multiply',
-                     opacity: 1,
-                     color: 'transparent',
-                     lineHeight: '1',
-                     transformOrigin: '0 0'
-                   }}
+                   className="textLayer"
                    onMouseUp={handleTextSelection}
                  />
 
-                 {/* Highlights Visuals */}
+                 {/* Highlights Visuals (Rendered using normalized coordinates * current scale) */}
                  <div className="absolute inset-0 pointer-events-none">
                     {currentHighlights.map(h => (
                       <div 
                         key={h.id} 
                         style={{ 
                            position: 'absolute', 
-                           left: h.x, 
-                           top: h.y, 
-                           width: h.width, 
-                           height: h.height, 
+                           left: h.x * scale, 
+                           top: h.y * scale, 
+                           width: h.width * scale, 
+                           height: h.height * scale, 
                            backgroundColor: h.color,
                            mixBlendMode: 'multiply',
                            opacity: 0.6
@@ -413,6 +444,7 @@ function App() {
                    <DraggablePostit 
                      key={p.id} 
                      data={p} 
+                     scale={scale} // Pass scale to handle interactions correctly
                      onUpdate={updatePostit} 
                      onDelete={deleteAnnotation} 
                      darkMode={darkMode}
@@ -473,7 +505,7 @@ function App() {
     );
   }
 
-  // --- RENDER: GRAPH VIEW ---
+  // --- RENDER: GRAPH VIEW (Same as before) ---
   if (activeView === 'graph') {
     return (
       <div className="h-screen flex flex-col bg-nb-gray">
@@ -497,7 +529,7 @@ function App() {
     );
   }
 
-  // --- RENDER: KANBAN LIBRARY ---
+  // --- RENDER: KANBAN LIBRARY (Unchanged) ---
   return (
     <div className="min-h-screen bg-nb-gray flex flex-col font-sans text-black">
       {/* Header */}
@@ -556,20 +588,14 @@ function App() {
                           {columns[status].map((paper, index) => (
                             <Draggable key={paper.id} draggableId={paper.id} index={index}>
                                {(provided) => {
-                                 // Visual randomness
-                                 const rotate = index % 2 === 0 ? 'rotate-1' : '-rotate-1';
                                  const color = COLORS.find(c => c.class === paper.color) || COLORS[0];
-                                 
                                  return (
                                    <div
                                      ref={provided.innerRef}
                                      {...provided.draggableProps}
                                      {...provided.dragHandleProps}
-                                     className={`relative p-5 border-3 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${color.class} ${rotate} hover:scale-105 hover:z-50 transition-transform cursor-grab active:cursor-grabbing`}
+                                     className={`relative p-5 border-3 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${color.class} rotate-1 hover:scale-105 hover:z-50 transition-transform cursor-grab active:cursor-grabbing`}
                                    >
-                                      {/* Tape Effect */}
-                                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-20 h-8 bg-white/40 border border-white/50 rotate-2 shadow-sm backdrop-blur-sm z-10"></div>
-                                      
                                       <div className="flex justify-between items-start mb-2 mt-2">
                                         <h3 className="font-black text-lg leading-tight uppercase line-clamp-3 flex-1">{paper.title}</h3>
                                         <div className="flex flex-col gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -577,12 +603,10 @@ function App() {
                                            <button onClick={() => { if(confirm("Delete?")) deleteDoc(doc(db, "papers", paper.id)) }} className="text-red-600"><Trash2 size={16}/></button>
                                         </div>
                                       </div>
-                                      
                                       <div className="border-t-2 border-black/20 pt-2 mb-4 text-xs font-mono font-bold flex justify-between">
                                          <span>{paper.authors?.split(',')[0] || 'Unknown'}</span>
                                          <span>{paper.year}</span>
                                       </div>
-
                                       <button onClick={() => { setSelectedPaper(paper); pdfjsLib.getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
                                         <Eye size={16} /> Read Paper
                                       </button>
@@ -601,7 +625,7 @@ function App() {
         </DragDropContext>
       </div>
 
-      {/* Metadata Modal */}
+      {/* Metadata Modal (Unchanged) */}
       {showMetadataModal && editingPaper && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className="bg-white border-4 border-black shadow-[16px_16px_0px_0px_rgba(255,255,255,1)] w-full max-w-lg p-8 relative">
@@ -640,9 +664,7 @@ function App() {
   );
 }
 
-// --- DRAGGABLE POSTIT COMPONENT ---
-// Standard Mouse-Event based dragging (reliable on canvas)
-function DraggablePostit({ data, onUpdate, onDelete, darkMode }) {
+function DraggablePostit({ data, onUpdate, onDelete, darkMode, scale }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.text);
@@ -650,19 +672,21 @@ function DraggablePostit({ data, onUpdate, onDelete, darkMode }) {
 
   const handleMouseDown = (e) => {
     if (isEditing) return;
-    e.stopPropagation(); // Prevent PDF panning
+    e.stopPropagation();
     setIsDragging(true);
+    // Calculate offset considering scale
     offset.current = {
-      x: e.clientX - data.x,
-      y: e.clientY - data.y
+      x: e.clientX - (data.x * scale),
+      y: e.clientY - (data.y * scale)
     };
   };
 
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isDragging) return;
-      const newX = e.clientX - offset.current.x;
-      const newY = e.clientY - offset.current.y;
+      // Reverse scale calculation to store normalized coordinates
+      const newX = (e.clientX - offset.current.x) / scale;
+      const newY = (e.clientY - offset.current.y) / scale;
       onUpdate(data.id, { x: newX, y: newY });
     };
 
@@ -678,20 +702,19 @@ function DraggablePostit({ data, onUpdate, onDelete, darkMode }) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, onUpdate, data.id]);
+  }, [isDragging, onUpdate, data.id, scale]);
 
   return (
      <div 
-       style={{ position: 'absolute', left: data.x, top: data.y }}
+       style={{ position: 'absolute', left: data.x * scale, top: data.y * scale }}
        className={`w-48 p-4 border-2 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${data.color.class || 'bg-nb-yellow'} z-50 cursor-move group hover:scale-105 transition-transform`}
        onMouseDown={handleMouseDown}
        onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
      >
-        {/* Header/Handle */}
         <div className="flex justify-between items-start mb-2 border-b border-black/20 pb-1">
            <span className="text-[10px] font-black uppercase bg-white px-1 border border-black">Note</span>
            <button 
-             onMouseDown={(e) => e.stopPropagation()} // Prevent drag start on delete
+             onMouseDown={(e) => e.stopPropagation()}
              onClick={() => onDelete(data.id, 'postit')} 
              className="bg-red-600 text-white p-0.5 border border-black hover:bg-red-800"
            >
@@ -699,14 +722,13 @@ function DraggablePostit({ data, onUpdate, onDelete, darkMode }) {
            </button>
         </div>
         
-        {/* Content */}
         {isEditing ? (
           <textarea 
             className="w-full h-24 text-sm font-bold bg-white/50 border-2 border-black p-1 focus:outline-none resize-none" 
             value={text} 
             onChange={e => setText(e.target.value)}
             onBlur={() => { setIsEditing(false); onUpdate(data.id, { text }); }}
-            onMouseDown={e => e.stopPropagation()} // Allow text selection inside
+            onMouseDown={e => e.stopPropagation()}
             autoFocus
           />
         ) : (
