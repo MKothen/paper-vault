@@ -11,7 +11,6 @@ import {
   Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
   Info, LayoutGrid, BarChart3, Download, FileText
 } from 'lucide-react';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
 
 // --- REACT-PDF IMPORTS ---
