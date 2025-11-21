@@ -13,7 +13,7 @@ import * as pdfjsLibModule from 'pdfjs-dist';
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 // --- VITE/PDFJS INTEROP FIX ---
-// This handles the case where Vite serves the library inside a .default property
+// We unwrap the module if necessary, though v4 usually exports directly on the namespace
 const pdfjsLib = pdfjsLibModule.default || pdfjsLibModule;
 
 // Configure worker
@@ -164,7 +164,7 @@ function App() {
       renderTask = page.render({ canvasContext: context, viewport });
       await renderTask.promise;
 
-      // 3. Text Layer Rendering (Using unwrapped pdfjsLib)
+      // 3. Text Layer Rendering (Using new TextLayer API)
       if (textLayerRef.current) {
         const textContent = await page.getTextContent();
         textLayerRef.current.innerHTML = '';
@@ -174,17 +174,14 @@ function App() {
         textLayerRef.current.style.width = `${viewport.width}px`;
         textLayerRef.current.style.setProperty('--scale-factor', scale);
 
-        // Use the safe reference
-        if (pdfjsLib.renderTextLayer) {
-            await pdfjsLib.renderTextLayer({
-              textContentSource: textContent,
-              container: textLayerRef.current,
-              viewport: viewport,
-              textDivs: []
-            }).promise;
-        } else {
-            console.error("Critical Error: renderTextLayer missing from pdfjsLib", pdfjsLib);
-        }
+        // NEW: Instantiate TextLayer directly
+        const textLayer = new pdfjsLib.TextLayer({
+          textContentSource: textContent,
+          container: textLayerRef.current,
+          viewport: viewport
+        });
+        
+        await textLayer.render();
       }
     };
 
@@ -613,9 +610,7 @@ function App() {
                                          <span>{paper.authors?.split(',')[0] || 'Unknown'}</span>
                                          <span>{paper.year}</span>
                                       </div>
-                                      <button onClick={() => { setSelectedPaper(paper); 
-                                        // Use the safe pdfjsLib reference here too
-                                        pdfjsLib.getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
+                                      <button onClick={() => { setSelectedPaper(paper); pdfjsLib.getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
                                         <Eye size={16} /> Read Paper
                                       </button>
                                    </div>
