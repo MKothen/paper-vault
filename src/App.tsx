@@ -9,12 +9,12 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
 
 // --- CONFIGURATION ---
-// Standard imports for pdfjs-dist v4.x
-import { getDocument, GlobalWorkerOptions, renderTextLayer } from 'pdfjs-dist';
+// FIXED IMPORTS: Use namespace import for robustness
+import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-// Set worker manually to ensure version match
-GlobalWorkerOptions.workerSrc = pdfWorker;
+// Configure worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const APP_PASSWORD = "science-rocks";
 
@@ -128,7 +128,7 @@ function App() {
     }
   }, [selectedPaper]);
 
-  // --- ROBUST PDF RENDERING (Fixed for v4.x) ---
+  // --- ROBUST PDF RENDERING ---
   useEffect(() => {
     if (!pdfDoc || !currentPage || !canvasRef.current) return;
 
@@ -161,18 +161,18 @@ function App() {
       renderTask = page.render({ canvasContext: context, viewport });
       await renderTask.promise;
 
-      // 3. Text Layer Rendering (Updated for v4.x API)
+      // 3. Text Layer Rendering
       if (textLayerRef.current) {
         const textContent = await page.getTextContent();
         textLayerRef.current.innerHTML = '';
         
-        // Match CSS dimensions exactly to the viewport (logical pixels)
+        // Match CSS dimensions exactly
         textLayerRef.current.style.height = `${viewport.height}px`;
         textLayerRef.current.style.width = `${viewport.width}px`;
         textLayerRef.current.style.setProperty('--scale-factor', scale);
 
-        // Use the standalone renderTextLayer function
-        await renderTextLayer({
+        // Fix: Access renderTextLayer via the pdfjsLib object
+        await pdfjsLib.renderTextLayer({
           textContentSource: textContent,
           container: textLayerRef.current,
           viewport: viewport,
@@ -213,7 +213,6 @@ function App() {
     const canvasRect = canvasRef.current.getBoundingClientRect();
 
     // ROBUSTNESS: Normalize coordinates to PDF scale (1.0)
-    // This ensures highlights stay in place even when zoom changes
     const newHighlight = {
       id: Date.now(),
       page: currentPage,
@@ -609,7 +608,7 @@ function App() {
                                          <span>{paper.authors?.split(',')[0] || 'Unknown'}</span>
                                          <span>{paper.year}</span>
                                       </div>
-                                      <button onClick={() => { setSelectedPaper(paper); getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
+                                      <button onClick={() => { setSelectedPaper(paper); pdfjsLib.getDocument(paper.pdfUrl).promise.then(pdf => { setPdfDoc(pdf); setNumPages(pdf.numPages); setActiveView('reader'); }); }} className="w-full bg-black text-white font-bold py-2 text-sm hover:bg-white hover:text-black border-2 border-transparent hover:border-black transition-colors uppercase flex items-center justify-center gap-2">
                                         <Eye size={16} /> Read Paper
                                       </button>
                                    </div>
