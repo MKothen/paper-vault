@@ -13,14 +13,20 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@types/react-window": "^2.0.0",
+    "d3-hierarchy": "^3.1.2",
+    "d3-scale": "^4.0.2",
     "firebase": "^12.6.0",
+    "fuse.js": "^7.1.0",
     "gh-pages": "^6.3.0",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-firebase-hooks": "^5.1.1",
     "react-force-graph-2d": "^1.29.0",
-    "react-pdf": "^10.2.0"
+    "react-pdf": "^10.2.0",
+    "react-window": "^2.2.3",
+    "recharts": "^3.4.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
