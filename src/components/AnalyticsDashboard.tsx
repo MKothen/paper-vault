@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Paper, ReadingSession } from '../types';
+import type { Paper, ReadingSession } from '../types';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { BookOpen, Clock, TrendingUp, Award, Flame } from 'lucide-react';
 
