@@ -15,7 +15,7 @@ export interface Paper {
   pdfUrl: string;
   createdAt: number;
   
-  // New fields
+  // Existing new fields
   rating?: number; // 1-5 stars
   methods?: string[]; // Experimental methods
   organisms?: string[]; // Model organisms studied
@@ -30,6 +30,25 @@ export interface Paper {
   references?: string[]; // Paper IDs this cites
   thumbnailUrl?: string; // Cached first page
   structuredNotes?: StructuredNotes;
+  
+  // New detailed metadata fields
+  journal?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  publisher?: string;
+  keywords?: string[];
+  language?: string;
+  issn?: string;
+  pmid?: string; // PubMed ID
+  arxivId?: string;
+  semanticScholarId?: string;
+  citationStyle?: string; // APA, MLA, Chicago, etc.
+  pdfHash?: string; // For duplicate detection
+  fileSize?: number;
+  pageCount?: number;
+  addedDate?: number;
+  modifiedDate?: number;
 }
 
 export interface HierarchicalTag {
@@ -56,6 +75,7 @@ export interface Highlight {
   category?: 'methodology' | 'results' | 'related-work' | 'discussion' | 'limitation' | 'general';
   linkedPapers?: string[]; // Paper IDs
   note?: string;
+  createdAt?: number;
 }
 
 export interface PostIt {
@@ -66,6 +86,7 @@ export interface PostIt {
   text: string;
   color: { name: string; class: string; hex: string };
   linkedPapers?: string[];
+  createdAt?: number;
 }
 
 export interface ReadingSession {
@@ -100,4 +121,40 @@ export interface CitationData {
   citationCount: number;
   references: Array<{ paperId: string; title: string }>;
   citations: Array<{ paperId: string; title: string }>;
+}
+
+export interface AuthorNode {
+  id: string;
+  name: string;
+  paperCount: number;
+  collaborators: string[]; // Author IDs
+}
+
+export interface ReadingStats {
+  papersReadTotal: number;
+  papersReadThisMonth: number;
+  papersReadThisWeek: number;
+  totalReadingTime: number; // seconds
+  averageReadingTime: number; // seconds per paper
+  currentStreak: number; // days
+  longestStreak: number; // days
+  tagFrequency: Record<string, number>;
+  methodFrequency: Record<string, number>;
+  organismFrequency: Record<string, number>;
+  yearDistribution: Record<string, number>;
+  monthlyReadings: Array<{ month: string; count: number }>;
+}
+
+export interface BibTeXEntry {
+  type: string; // article, book, inproceedings, etc.
+  citationKey: string;
+  fields: Record<string, string>;
+}
+
+export interface RelatedPaper {
+  paperId: string;
+  title: string;
+  similarity: number; // 0-1
+  sharedTags: string[];
+  sharedAuthors: string[];
 }
