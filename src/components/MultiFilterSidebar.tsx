@@ -1,5 +1,5 @@
 import React from 'react';
-import { FilterState, Paper } from '../types';
+import type { FilterState, Paper } from '../types';
 import { X, Filter, ChevronDown, Star } from 'lucide-react';
 
 interface Props {
