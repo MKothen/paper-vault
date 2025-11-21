@@ -1,6 +1,6 @@
 // src/components/RelatedWorkFinder.tsx
 import React, { useState, useEffect } from 'react';
-import { fetchRelatedPapers } from '../utils/semanticScholar';
+import { fetchCitationData } from '../utils/semanticScholar';
 import type { Paper } from '../types';
 import { Loader2, ExternalLink, Plus, RefreshCw } from 'lucide-react';
 
@@ -15,39 +15,41 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
 
   useEffect(() => {
     if (currentPaper.semanticScholarId || currentPaper.doi) {
-      loadRelated();
+      loadReferences();
     }
   }, [currentPaper]);
 
-  const loadRelated = async () => {
+  const loadReferences = async () => {
     setLoading(true);
     const id = currentPaper.semanticScholarId || `DOI:${currentPaper.doi}`;
-    // Fetch papers that cite this one, and sort by citation count
-    const rawData = await fetchRelatedPapers(id, 100);
-    // Most S2 citation endpoints nest the cited/citing paper under 'citingPaper', and may not contain citation counts unless extra fields are requested.
-    const cleanData = rawData.map((item: any) => {
-      const citing = item.citingPaper || item;
+    // Fetch the references (papers cited BY the current paper)
+    const data = await fetchCitationData(id);
+    // Defensive: references array may be missing or empty
+    let refList = (data && Array.isArray(data.references)) ? data.references : [];
+    // Unpack reference paper details and robustly guard on values, default citationCount to 0
+    let papers = refList.map((item: any) => {
+      const ref = item.reference || item;
       return {
-        paperId: citing.paperId,
-        title: citing.title,
-        authors: citing.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
-        year: citing.year,
-        abstract: citing.abstract,
-        venue: citing.venue,
-        citationCount: citing.citationCount || 0
-      };
+        paperId: ref.paperId,
+        title: ref.title,
+        authors: ref.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
+        year: ref.year,
+        abstract: ref.abstract,
+        venue: ref.venue,
+        citationCount: ref.citationCount || 0
+      }
     }).filter(p => p.paperId && p.title);
-    // Sort by citation count
-    cleanData.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
-    setRelated(cleanData.slice(0, 20));
+    // Sort by citation count (highest first)
+    papers.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
+    setRelated(papers.slice(0, 20));
     setLoading(false);
   };
 
   return (
     <div className="bg-white border-4 border-black p-4 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
-        <h3 className="font-black uppercase">Most-Cited Papers That Cite This Work</h3>
-        <button onClick={loadRelated} className="p-1 hover:bg-gray-100 rounded">
+        <h3 className="font-black uppercase">Top 20 Most-Cited References</h3>
+        <button onClick={loadReferences} className="p-1 hover:bg-gray-100 rounded">
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
@@ -55,7 +57,7 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
         {loading ? (
           <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
         ) : related.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center italic">No citing papers found.</p>
+          <p className="text-gray-500 text-sm text-center italic">No references found.</p>
         ) : (
           related.map((paper, idx) => (
             <div key={paper.paperId || paper.title || idx} className="border-2 border-black p-3 hover:bg-gray-50 transition-colors">
