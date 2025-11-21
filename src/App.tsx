@@ -4,7 +4,11 @@ import { auth, signInWithGoogle, logout, db, storage } from './firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Save, Search, FileText, StickyNote, Download, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Sun, Moon, Timer, ExternalLink, Calendar, Layout, Clock } from 'lucide-react';
+import { 
+  BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Save, Search, 
+  StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
+  Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut 
+} from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import ForceGraph2D from 'react-force-graph-2d';
 
@@ -32,12 +36,6 @@ const HIGHLIGHT_COLORS = [
   { name: 'Green', hex: '#a3e635', alpha: 'rgba(163, 230, 53, 0.4)' },
   { name: 'Blue', hex: '#22d3ee', alpha: 'rgba(34, 211, 238, 0.4)' },
   { name: 'Pink', hex: '#FF90E8', alpha: 'rgba(255, 144, 232, 0.4)' },
-];
-
-const NOTE_TEMPLATES = [
-  { label: "KEY FINDING", prefix: "👉 Key Finding: " },
-  { label: "METHOD", prefix: "🧪 Methodology: " },
-  { label: "IDEA", prefix: "💡 Idea: " },
 ];
 
 const generateSmartTags = (title) => {
@@ -92,6 +90,7 @@ function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [pomodoroTime, setPomodoroTime] = useState(25 * 60);
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
+  const [isHighlightMode, setIsHighlightMode] = useState(false);
   const pomodoroRef = useRef(null);
 
   // --- DATA & AUTH ---
@@ -128,6 +127,7 @@ function App() {
       setHighlights(h ? JSON.parse(h) : []);
       setPostits(p ? JSON.parse(p) : []);
       setPageNumber(1);
+      setIsHighlightMode(false); 
     }
   }, [selectedPaper]);
 
@@ -145,6 +145,9 @@ function App() {
   };
 
   const handlePageClick = () => {
+    // Only highlight if mode is active
+    if (!isHighlightMode) return;
+
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
 
@@ -173,7 +176,7 @@ function App() {
     selection.removeAllRanges();
   };
 
-  const addPostit = (text = "New Note") => {
+  const addPostit = (text = "Double click to edit...") => {
     const jitterX = (Math.random() * 40 - 20);
     const jitterY = (Math.random() * 40 - 20);
     const newPostit = {
@@ -244,7 +247,7 @@ function App() {
        await uploadBytes(fileRef, file);
        const url = await getDownloadURL(fileRef);
        setUploadedPdfUrl(url);
-       setNewTitle(file.name.replace('.pdf', '')); // Auto-fill title
+       setNewTitle(file.name.replace('.pdf', '')); 
     } catch (e) {
        alert("Upload failed: " + e.message);
     }
@@ -254,7 +257,6 @@ function App() {
   const addPaper = async (e) => {
     e.preventDefault();
     if (!newTitle) return;
-    
     await addDoc(collection(db, "papers"), {
       userId: user.uid,
       title: newTitle,
@@ -270,21 +272,12 @@ function App() {
       pdfUrl: uploadedPdfUrl,
       createdAt: Date.now()
     });
-    
-    // Reset form
     setNewTitle(""); setNewLink(""); setNewTags([]); setNewAbstract(""); 
     setNewAuthors(""); setNewYear(""); setNewVenue(""); setUploadedPdfUrl(""); setDoiInput("");
   };
 
-  const updatePaper = async (id, updatedData) => {
-    await updateDoc(doc(db, "papers", id), updatedData);
-    setEditingPaper(null);
-  };
-
   const deletePaper = async (id) => {
-    if(confirm("Delete this paper?")) {
-      await deleteDoc(doc(db, "papers", id));
-    }
+    if(confirm("Delete this paper?")) await deleteDoc(doc(db, "papers", id));
   };
 
   const allUniqueTags = useMemo(() => {
@@ -295,8 +288,7 @@ function App() {
 
   const filteredPapers = papers.filter(p => {
     const q = searchTerm.toLowerCase();
-    return p.title.toLowerCase().includes(q) || 
-           p.tags?.some(t => t.toLowerCase().includes(q));
+    return p.title.toLowerCase().includes(q) || p.tags?.some(t => t.toLowerCase().includes(q));
   });
 
   const graphData = useMemo(() => {
@@ -367,9 +359,16 @@ function App() {
                <button key={c.name} onClick={() => setSelectedColor(c)} className={`w-6 h-6 border-2 border-black ${selectedColor.name === c.name ? 'ring-2 ring-offset-2 ring-black' : ''}`} style={{ backgroundColor: c.hex }} />
              ))}
            </div>
-           <button onClick={() => document.querySelector('.pdf-page-container')?.dispatchEvent(new Event('mouseup'))} className="nb-button text-xs flex gap-1">
-             <Highlighter size={14} /> Highlight
+           
+           {/* HIGHLIGHT TOGGLE BUTTON */}
+           <button 
+             onClick={() => setIsHighlightMode(!isHighlightMode)} 
+             className={`nb-button text-xs flex gap-1 items-center ${isHighlightMode ? 'bg-nb-lime shadow-none translate-y-1' : ''}`}
+           >
+             {isHighlightMode ? <Check size={14} strokeWidth={4} /> : <Highlighter size={14} />} 
+             {isHighlightMode ? 'HIGHLIGHTING ON' : 'HIGHLIGHT OFF'}
            </button>
+
            <button onClick={() => addPostit()} className="nb-button text-xs flex gap-1 bg-nb-cyan">
              <StickyNote size={14} /> Note
            </button>
@@ -408,7 +407,13 @@ function App() {
 
                  {/* Post-its Overlay */}
                  {postits.filter(p => p.page === pageNumber).map(p => (
-                   <DraggablePostit key={p.id} data={p} scale={scale} onUpdate={updatePostit} onDelete={deleteAnnotation} />
+                   <DraggablePostit 
+                     key={p.id} 
+                     data={p} 
+                     scale={scale} 
+                     onUpdate={updatePostit} 
+                     onDelete={deleteAnnotation} 
+                   />
                  ))}
               </div>
            </div>
@@ -421,6 +426,7 @@ function App() {
                    <button onClick={() => setShowSidebar(false)}><X strokeWidth={3}/></button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                   {highlights.filter(h => h.page === pageNumber).length === 0 && postits.filter(p => p.page === pageNumber).length === 0 && <div className="text-center opacity-50 font-bold font-mono">NO ANNOTATIONS ON THIS PAGE</div>}
                    {highlights.filter(h => h.page === pageNumber).map(h => (
                      <div key={h.id} className="border-2 border-black p-2 bg-white text-black shadow-nb-sm">
                         <div className="flex justify-between items-center mb-1 border-b border-black pb-1">
@@ -505,7 +511,6 @@ function App() {
         </div>
       </header>
       
-      {/* ADD PAPER / SEARCH TOOLBAR */}
       <div className="bg-white border-b-4 border-black p-4 flex flex-col gap-4 z-20">
          <div className="flex gap-4 items-center">
             <div className="flex-1 relative min-w-[200px]">
@@ -518,7 +523,6 @@ function App() {
             </button>
          </div>
 
-         {/* DOI / Manual Entry Form */}
          <div className="bg-nb-gray p-4 border-2 border-black flex flex-col gap-4">
             <div className="flex gap-2">
                 <input value={doiInput} onChange={e => setDoiInput(e.target.value)} className="nb-input" placeholder="Paste DOI to auto-fill..." />
@@ -535,7 +539,6 @@ function App() {
          </div>
       </div>
 
-      {/* KANBAN BOARD */}
       <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
         <DragDropContext onDragEnd={async (result) => {
           if (!result.destination) return;
@@ -582,7 +585,6 @@ function App() {
         </DragDropContext>
       </div>
 
-      {/* EDIT MODAL */}
       {showMetadataModal && editingPaper && (
         <PaperDetailsModal paper={editForm} onClose={() => setShowMetadataModal(false)} onSave={async (data) => { await updateDoc(doc(db, "papers", editingPaper.id), data); setShowMetadataModal(false); }} allTags={allUniqueTags} />
       )}
@@ -633,7 +635,6 @@ function TimelineView({ papers, onEdit, onDelete, onRead }) {
 
 function PaperDetailsModal({ paper, allTags, onClose, onSave }) {
   const [formData, setFormData] = useState(paper);
-  
   return (
     <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
        <div className="bg-white border-4 border-black shadow-[16px_16px_0px_0px_rgba(255,255,255,1)] w-full max-w-lg p-8 relative max-h-[90vh] overflow-y-auto">
@@ -647,14 +648,12 @@ function PaperDetailsModal({ paper, allTags, onClose, onSave }) {
                 <input className="nb-input" value={formData.venue || ''} onChange={e => setFormData({...formData, venue: e.target.value})} placeholder="Venue" />
              </div>
              <textarea className="nb-input" rows={4} value={formData.abstract || ''} onChange={e => setFormData({...formData, abstract: e.target.value})} placeholder="Abstract"></textarea>
-             
              <label className="font-bold block">Color</label>
              <div className="flex gap-2 flex-wrap">
                 {COLORS.map(c => (
                   <button key={c.name} onClick={() => setFormData({...formData, color: c.class})} className={`w-8 h-8 border-2 border-black ${c.class} ${formData.color === c.class ? 'ring-2 ring-offset-2 ring-black' : ''}`} />
                 ))}
              </div>
-
              <div className="flex gap-4 pt-4">
                 <button onClick={onClose} className="flex-1 nb-button bg-white">Cancel</button>
                 <button onClick={() => onSave(formData)} className="flex-1 nb-button bg-nb-lime">Save</button>
@@ -665,19 +664,15 @@ function PaperDetailsModal({ paper, allTags, onClose, onSave }) {
   );
 }
 
-function TagInput({ tags, setTags, allTags }) {
-    // Simplified for brevity - fully functional tag input logic can be pasted here if needed
-    return <div>{tags?.join(', ')}</div>
-}
-
 function DraggablePostit({ data, onUpdate, onDelete, scale }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.text);
   const offset = useRef({ x: 0, y: 0 });
 
+  // Mouse handler for dragging the Post-it container
   const handleMouseDown = (e) => {
-    if (isEditing) return;
+    if (isEditing) return; // Do not drag if editing text
     e.stopPropagation();
     setIsDragging(true);
     offset.current = { x: e.clientX - (data.x * scale), y: e.clientY - (data.y * scale) };
@@ -710,10 +705,22 @@ function DraggablePostit({ data, onUpdate, onDelete, scale }) {
      >
         <div className="flex justify-between items-start mb-2 border-b border-black/20 pb-1">
            <span className="text-[10px] font-black uppercase bg-white px-1 border border-black">Note</span>
-           <button onMouseDown={(e) => e.stopPropagation()} onClick={() => onDelete(data.id, 'postit')} className="bg-red-600 text-white p-0.5 border border-black hover:bg-red-800"><X size={12} strokeWidth={3}/></button>
+           <div className="flex gap-1">
+             {/* Edit Button to explicitly enter edit mode */}
+             <button onMouseDown={(e) => e.stopPropagation()} onClick={() => setIsEditing(true)} className="text-black p-0.5 hover:bg-white/50 rounded"><Pencil size={12} strokeWidth={3}/></button>
+             <button onMouseDown={(e) => e.stopPropagation()} onClick={() => onDelete(data.id, 'postit')} className="bg-red-600 text-white p-0.5 border border-black hover:bg-red-800"><X size={12} strokeWidth={3}/></button>
+           </div>
         </div>
         {isEditing ? (
-          <textarea className="w-full h-24 text-sm font-bold bg-white/50 border-2 border-black p-1 focus:outline-none resize-none" value={text} onChange={e => setText(e.target.value)} onBlur={() => { setIsEditing(false); onUpdate(data.id, { text }); }} onMouseDown={e => e.stopPropagation()} autoFocus />
+          <textarea 
+            className="w-full h-24 text-sm font-bold bg-white/50 border-2 border-black p-1 focus:outline-none resize-none text-black" 
+            value={text} 
+            onChange={e => setText(e.target.value)} 
+            onBlur={() => { setIsEditing(false); onUpdate(data.id, { text }); }} 
+            onMouseDown={(e) => e.stopPropagation()} // Prevent drag start when clicking textarea
+            onClick={(e) => e.stopPropagation()}      // Prevent other click handlers
+            autoFocus 
+          />
         ) : (
           <p className="text-sm font-bold font-mono leading-tight whitespace-pre-wrap select-none">{data.text}</p>
         )}
