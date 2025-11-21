@@ -1,33 +1,48 @@
 // src/components/AISummary.tsx
 import React, { useState } from 'react';
+import { Sparkles, Loader2, Copy, Check } from 'lucide-react';
 import type { Paper } from '../types';
-import { Sparkles, Copy, Check } from 'lucide-react';
 
-// NOTE: This requires a backend function or API key for OpenAI/Anthropic/Gemini.
-// This is a frontend implementation that would call such a service.
+interface Props {
+  paper: Paper;
+}
 
-export function AISummary({ paper }: { paper: Paper }) {
-  const [summary, setSummary] = useState("");
+export function AISummary({ paper }: Props) {
+  const [summary, setSummary] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const generateSummary = async () => {
     setLoading(true);
     
-    // SIMULATED API CALL
-    setTimeout(() => {
-      setSummary(
-        `Here is a generated summary for "${paper.title}":\n\n` +
-        `This paper investigates the effects of [variable] on [subject]. ` +
-        `Using ${paper.methods?.[0] || 'experimental methods'}, the authors demonstrate that... \n\n` +
-        `**Key Findings:**\n` +
-        `- Significant correlation between X and Y\n` +
-        `- Novel mechanism proposed for Z\n\n` +
-        `**Conclusion:**\n` +
-        `The study suggests that further research into ${paper.tags?.[0] || 'this topic'} is warranted.`
-      );
-      setLoading(false);
-    }, 1500);
+    // Simple extractive summary using key sentences
+    // In production, replace with actual AI API (OpenAI, Claude, etc.)
+    try {
+      const text = paper.abstract || '';
+      
+      if (!text) {
+        setSummary('No abstract available for summarization.');
+        setLoading(false);
+        return;
+      }
+
+      // Simple extractive summary: take first 3 sentences
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+      const keySentences = sentences.slice(0, 3).join(' ');
+      
+      // Add some basic formatting
+      const formattedSummary = `**Key Points:**\n\n${keySentences}\n\n**Topics:** ${paper.tags?.join(', ') || 'N/A'}\n**Year:** ${paper.year || 'N/A'}`;
+      
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setSummary(formattedSummary);
+    } catch (error) {
+      console.error('Error generating summary:', error);
+      setSummary('Failed to generate summary. Please try again.');
+    }
+    
+    setLoading(false);
   };
 
   const copyToClipboard = () => {
@@ -37,41 +52,49 @@ export function AISummary({ paper }: { paper: Paper }) {
   };
 
   return (
-    <div className="bg-white border-4 border-black p-4 shadow-nb">
-      <div className="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
+    <div className="bg-white border-4 border-black p-4">
+      <div className="flex items-center justify-between mb-4 pb-2 border-b-2 border-black">
         <h3 className="font-black uppercase flex items-center gap-2">
-          <Sparkles size={18} className="text-nb-purple" /> 
+          <Sparkles size={18} className="text-purple-600" />
           AI Summary
         </h3>
-        {summary && (
-          <button onClick={copyToClipboard} className="hover:text-nb-cyan">
-            {copied ? <Check size={16} /> : <Copy size={16} />}
+        {summary && !loading && (
+          <button
+            onClick={copyToClipboard}
+            className="nb-button text-xs px-2 py-1 bg-white flex items-center gap-1"
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            {copied ? 'Copied!' : 'Copy'}
           </button>
         )}
       </div>
 
       {!summary && !loading && (
-        <div className="text-center py-6">
-          <p className="text-sm text-gray-500 mb-4">Generate a concise summary of this paper using AI.</p>
-          <button 
-            onClick={generateSummary}
-            className="nb-button bg-nb-purple text-white w-full"
-          >
-            Generate Summary
-          </button>
-        </div>
+        <button
+          onClick={generateSummary}
+          className="nb-button w-full py-3 bg-purple-200 hover:bg-purple-300 flex items-center justify-center gap-2"
+        >
+          <Sparkles size={16} />
+          Generate AI Summary
+        </button>
       )}
 
       {loading && (
-        <div className="flex flex-col items-center justify-center py-8 gap-2 animate-pulse">
-          <Sparkles className="animate-spin text-nb-purple" size={24} />
-          <span className="text-xs font-bold uppercase">Reading paper...</span>
+        <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+          <Loader2 className="animate-spin mb-2" size={32} />
+          <p className="text-sm">Generating summary...</p>
         </div>
       )}
 
-      {summary && (
-        <div className="bg-gray-50 p-4 border-2 border-black font-serif text-sm leading-relaxed whitespace-pre-wrap">
-          {summary}
+      {summary && !loading && (
+        <div className="prose prose-sm max-w-none">
+          <div className="text-sm whitespace-pre-wrap leading-relaxed">
+            {summary.split('\n').map((line, i) => (
+              <p key={i} className={line.startsWith('**') ? 'font-bold mt-3' : ''}>
+                {line.replace(/\*\*/g, '')}
+              </p>
+            ))}
+          </div>
         </div>
       )}
     </div>

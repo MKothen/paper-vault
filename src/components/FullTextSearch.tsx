@@ -1,95 +1,88 @@
 // src/components/FullTextSearch.tsx
-import React, { useState, useEffect } from 'react';
-import type { Paper } from '../types';
-import { extractPDFText } from '../utils/pdfUtils';
-import { Search, Loader2, FileText } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 
-interface Props {
-  papers: Paper[];
-  onSelect: (paper: Paper) => void;
+interface SearchResult {
+  page: number;
+  text: string;
+  matchIndex: number;
 }
 
-export function FullTextSearch({ papers, onSelect }: Props) {
+interface Props {
+  onSearch: (query: string) => Promise<SearchResult[]>;
+  onResultClick: (result: SearchResult) => void;
+}
+
+export function FullTextSearch({ onSearch, onResultClick }: Props) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Array<{ paper: Paper, match: string }>>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  // Note: In a real app, you'd index this text in a DB or client-side index like Lunr.js.
-  // For this implementation, we assume the text might be stored or extracted on demand (which is slow).
-  // A better approach for local-first is storing extracted text in IndexedDB.
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const handleSearch = async () => {
-    if (!query) return;
-    setIsSearching(true);
+    if (!query.trim()) return;
     
-    const hits: Array<{ paper: Paper, match: string }> = [];
-    
-    // NOTE: Searching full text of ALL papers on demand is heavy. 
-    // This is a simplified demonstration. In production, use a search index.
-    // Here we simulate searching the 'abstract' and 'notes' which are readily available,
-    // plus checking if we have cached text content (mocked).
-    
-    const lowerQ = query.toLowerCase();
-    
-    for (const paper of papers) {
-      let match = '';
-      
-      // 1. Check Abstract
-      if (paper.abstract?.toLowerCase().includes(lowerQ)) {
-        const idx = paper.abstract.toLowerCase().indexOf(lowerQ);
-        match = '...' + paper.abstract.substring(Math.max(0, idx - 30), idx + lowerQ.length + 30) + '...';
-      }
-      // 2. Check Notes
-      else if (paper.notes?.toLowerCase().includes(lowerQ)) {
-        const idx = paper.notes.toLowerCase().indexOf(lowerQ);
-        match = '...' + paper.notes.substring(Math.max(0, idx - 30), idx + lowerQ.length + 30) + '...';
-      }
-      
-      if (match) {
-        hits.push({ paper, match });
-      }
-    }
-    
-    setResults(hits);
-    setIsSearching(false);
+    setLoading(true);
+    setExpanded(true);
+    const searchResults = await onSearch(query);
+    setResults(searchResults);
+    setLoading(false);
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="relative mb-6">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          placeholder="Search abstracts and notes..."
-          className="w-full p-4 pl-12 border-4 border-black shadow-nb text-lg font-bold focus:outline-none"
-        />
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={24} />
-        <button 
+    <div className="bg-white border-2 border-black">
+      <div className="flex items-center gap-2 p-2 border-b-2 border-black">
+        <div className="flex-1 flex items-center gap-2">
+          <Search size={16} className="text-gray-500" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder="Search in PDF..."
+            className="flex-1 outline-none text-sm"
+          />
+        </div>
+        <button
           onClick={handleSearch}
-          className="absolute right-2 top-2 bottom-2 px-4 bg-nb-cyan border-2 border-black font-bold hover:bg-nb-cyan/80"
+          disabled={loading}
+          className="nb-button text-xs px-3 py-1 bg-nb-blue"
         >
-          {isSearching ? <Loader2 className="animate-spin"/> : 'Search'}
+          {loading ? <Loader2 size={14} className="animate-spin" /> : 'Search'}
         </button>
-      </div>
-
-      <div className="space-y-4">
-        {results.map(({ paper, match }) => (
-          <div key={paper.id} onClick={() => onSelect(paper)} className="bg-white border-2 border-black p-4 hover:bg-gray-50 cursor-pointer shadow-sm">
-            <h4 className="font-black text-lg flex items-center gap-2">
-              <FileText size={16} className="text-nb-purple" />
-              {paper.title}
-            </h4>
-            <p className="text-sm text-gray-500 font-mono mb-2">{paper.authors}</p>
-            <div className="bg-yellow-50 p-2 border border-gray-200 text-sm font-serif italic">
-              "{match}"
-            </div>
-          </div>
-        ))}
-        {query && !isSearching && results.length === 0 && (
-          <div className="text-center text-gray-500 font-bold">No matches found.</div>
+        {results.length > 0 && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1 hover:bg-gray-100 rounded"
+          >
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
         )}
       </div>
+
+      {expanded && results.length > 0 && (
+        <div className="max-h-64 overflow-y-auto">
+          <div className="p-2 text-xs text-gray-600 border-b border-gray-200">
+            {results.length} {results.length === 1 ? 'result' : 'results'} found
+          </div>
+          {results.map((result, idx) => (
+            <button
+              key={idx}
+              onClick={() => onResultClick(result)}
+              className="w-full text-left p-2 border-b border-gray-100 hover:bg-gray-50 transition-colors"
+            >
+              <div className="text-xs text-gray-500 mb-1">Page {result.page}</div>
+              <div className="text-sm line-clamp-2">{result.text}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {expanded && results.length === 0 && !loading && query && (
+        <div className="p-4 text-center text-sm text-gray-500">
+          No results found for "{query}"
+        </div>
+      )}
     </div>
   );
 }
