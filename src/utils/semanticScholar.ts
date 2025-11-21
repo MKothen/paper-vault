@@ -17,11 +17,22 @@ export async function fetchCitationData(doi: string): Promise<CitationData | nul
 
 export async function fetchRelatedPapers(paperId: string, limit: number = 10) {
   try {
-    // Explicitly request citationCount for the citing papers
-    const response = await fetch(
-      `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/citations?fields=citingPaper.paperId,citingPaper.title,citingPaper.authors,citingPaper.year,citingPaper.abstract,citingPaper.venue,citingPaper.citationCount&limit=${limit}`
-    );
-    if (!response.ok) return [];
+    // Request citationCount for citing papers, strictly comma-separated, no spaces.
+    const queryFields = [
+      'citingPaper.paperId',
+      'citingPaper.title',
+      'citingPaper.authors',
+      'citingPaper.year',
+      'citingPaper.abstract',
+      'citingPaper.venue',
+      'citingPaper.citationCount'
+    ].join(',');
+    const url = `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/citations?fields=${queryFields}&limit=${limit}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error('Semantic Scholar API error:', response.status, response.statusText, url);
+      return [];
+    }
     const data = await response.json();
     return data.data || [];
   } catch (error) {
