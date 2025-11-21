@@ -4,8 +4,11 @@ import { Document, Page } from 'react-pdf';
 import { Paper, Highlight, PostIt } from '../types';
 import { 
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Highlighter, StickyNote, 
-  X, Save, List, Book, Type, Trash2 
+  X, Save, List, Book, Type, Trash2, Search 
 } from 'lucide-react';
+import { TableOfContents } from './TableOfContents';
+import { FullTextSearch } from './FullTextSearch';
+import { extractPDFText, extractPDFOutline } from '../utils/pdfUtils';
 
 interface Props {
   paper: Paper;
@@ -20,11 +23,67 @@ export function Reader({ paper, onClose, onUpdate, papers }: Props) {
   const [scale, setScale] = useState(1.2);
   const [highlights, setHighlights] = useState<Highlight[]>(() => JSON.parse(localStorage.getItem(`highlights-${paper.id}`) || '[]'));
   const [postits, setPostits] = useState<PostIt[]>(() => JSON.parse(localStorage.getItem(`postits-${paper.id}`) || '[]'));
+  const [tocItems, setTocItems] = useState<any[]>([]);
+  const [pdfText, setPdfText] = useState<Map<number, string>>(new Map());
   
   const [mode, setMode] = useState<'read' | 'highlight' | 'note'>('read');
   const [sidebarTab, setSidebarTab] = useState<'toc' | 'notes' | 'annotations'>('notes');
   const [activeCategory, setActiveCategory] = useState('general');
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Load PDF TOC and text on mount
+  useEffect(() => {
+    if (paper.pdfUrl) {
+      loadPDFData();
+    }
+  }, [paper.pdfUrl]);
+
+  const loadPDFData = async () => {
+    try {
+      // Load TOC
+      const outline = await extractPDFOutline(paper.pdfUrl!);
+      setTocItems(outline);
+
+      // Load full text for search (lazy load per page for performance)
+      const text = await extractPDFText(paper.pdfUrl!);
+      const pageTextMap = new Map<number, string>();
+      // Simple split by page (in production, use proper page extraction)
+      const pages = text.split('\f'); // Form feed character often separates pages
+      pages.forEach((pageText, idx) => {
+        pageTextMap.set(idx + 1, pageText);
+      });
+      setPdfText(pageTextMap);
+    } catch (error) {
+      console.error('Error loading PDF data:', error);
+    }
+  };
+
+  const handleFullTextSearch = async (query: string) => {
+    const results: Array<{ page: number; text: string; matchIndex: number }> = [];
+    const lowerQuery = query.toLowerCase();
+
+    pdfText.forEach((text, page) => {
+      const lowerText = text.toLowerCase();
+      let index = lowerText.indexOf(lowerQuery);
+      
+      while (index !== -1) {
+        // Extract context around match (50 chars before and after)
+        const start = Math.max(0, index - 50);
+        const end = Math.min(text.length, index + query.length + 50);
+        const context = text.substring(start, end);
+        
+        results.push({
+          page,
+          text: context,
+          matchIndex: index
+        });
+        
+        index = lowerText.indexOf(lowerQuery, index + 1);
+      }
+    });
+
+    return results;
+  };
 
   // Persist annotations
   useEffect(() => {
@@ -115,6 +174,14 @@ export function Reader({ paper, onClose, onUpdate, papers }: Props) {
           </div>
         </div>
 
+        {/* Full-Text Search Bar */}
+        <div className="border-b-2 border-black">
+          <FullTextSearch 
+            onSearch={handleFullTextSearch}
+            onResultClick={(result) => setPageNumber(result.page)}
+          />
+        </div>
+
         {/* PDF Canvas */}
         <div className="flex-1 overflow-auto p-8 flex justify-center" onClick={(e) => {
             if (mode === 'note') {
@@ -164,13 +231,22 @@ export function Reader({ paper, onClose, onUpdate, papers }: Props) {
       {/* Right Sidebar */}
       <div className="w-80 bg-white border-l-4 border-black flex flex-col">
         <div className="flex border-b-4 border-black">
-          <button onClick={() => setSidebarTab('notes')} className={`flex-1 p-2 font-bold uppercase ${sidebarTab === 'notes' ? 'bg-nb-yellow' : ''}`}>Notes</button>
-          <button onClick={() => setSidebarTab('annotations')} className={`flex-1 p-2 font-bold uppercase ${sidebarTab === 'annotations' ? 'bg-nb-yellow' : ''}`}>Highlights</button>
+          <button onClick={() => setSidebarTab('toc')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'toc' ? 'bg-nb-yellow' : ''}`}>TOC</button>
+          <button onClick={() => setSidebarTab('notes')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'notes' ? 'bg-nb-yellow' : ''}`}>Notes</button>
+          <button onClick={() => setSidebarTab('annotations')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'annotations' ? 'bg-nb-yellow' : ''}`}>Highlights</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto">
+          {sidebarTab === 'toc' && (
+            <TableOfContents 
+              items={tocItems}
+              currentPage={pageNumber}
+              onPageClick={setPageNumber}
+            />
+          )}
+
           {sidebarTab === 'notes' && (
-            <>
+            <div className="p-4 space-y-4">
               <h3 className="font-black uppercase mb-2">Structured Notes</h3>
               {['Research Question', 'Methods', 'Results', 'Conclusions', 'Limitations'].map(section => (
                 <div key={section}>
@@ -187,11 +263,11 @@ export function Reader({ paper, onClose, onUpdate, papers }: Props) {
                   />
                 </div>
               ))}
-            </>
+            </div>
           )}
 
           {sidebarTab === 'annotations' && (
-            <div className="space-y-2">
+            <div className="p-4 space-y-2">
               {highlights.map(h => (
                 <div key={h.id} className="border-2 border-black p-2 text-xs relative group">
                   <div className="flex justify-between mb-1">
