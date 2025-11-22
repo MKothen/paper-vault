@@ -15,15 +15,15 @@ export async function fetchCitationData(doi: string): Promise<CitationData | nul
   }
 }
 
-// Returns papers that cite the given paper with full metadata
+// Fetch papers that cite the given paper (removed abstract to avoid 500 errors with high limits)
 export async function fetchCitationsWithMetadata(paperId: string, limit: number = 100) {
   try {
+    // Removed abstract field - causes 500 errors when combined with high limit
     const fields = [
       'citingPaper.paperId',
       'citingPaper.title',
       'citingPaper.authors',
       'citingPaper.year',
-      'citingPaper.abstract',
       'citingPaper.venue',
       'citingPaper.citationCount'
     ].join(',');
@@ -43,11 +43,12 @@ export async function fetchCitationsWithMetadata(paperId: string, limit: number 
 
 export async function fetchRecommendedPapers(
   paperId: string, 
-  limit: number = 500,
+  limit: number = 500, // Max is 500 for recommendations API
   from: 'recent' | 'all-cs' = 'recent'
 ) {
   try {
-    const fields = 'paperId,title,authors,year,abstract,venue,citationCount,externalIds';
+    // Removed abstract and externalIds for better performance
+    const fields = 'paperId,title,authors,year,venue,citationCount';
     const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers/forpaper/${paperId}?fields=${fields}&limit=${limit}&from=${from}`;
     
     const response = await fetch(url);
@@ -67,10 +68,10 @@ export async function fetchRecommendedPapers(
 export async function fetchRecommendedPapersMultiple(
   positivePaperIds: string[],
   negativePaperIds: string[] = [],
-  limit: number = 500
+  limit: number = 500 // Max is 500 for recommendations API
 ) {
   try {
-    const fields = 'paperId,title,authors,year,abstract,venue,citationCount,externalIds';
+    const fields = 'paperId,title,authors,year,venue,citationCount';
     const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers?fields=${fields}&limit=${limit}`;
     
     const response = await fetch(url, {
