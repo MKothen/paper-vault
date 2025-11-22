@@ -18,6 +18,36 @@ export async function fetchCitationData(doi: string): Promise<CitationData | nul
   }
 }
 
+/**
+ * Fetch references (papers cited BY the given paper) with full metadata
+ * @param paperId - The Semantic Scholar paper ID
+ * @param limit - Number of references to return (max 1000)
+ */
+export async function fetchReferencesWithMetadata(paperId: string, limit: number = 100) {
+  try {
+    const queryFields = [
+      'citedPaper.paperId',
+      'citedPaper.title',
+      'citedPaper.authors',
+      'citedPaper.year',
+      'citedPaper.abstract',
+      'citedPaper.venue',
+      'citedPaper.citationCount'
+    ].join(',');
+    const url = `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/references?fields=${queryFields}&limit=${limit}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error('Semantic Scholar API error:', response.status, response.statusText, url);
+      return [];
+    }
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error('Failed to fetch references:', error);
+    return [];
+  }
+}
+
 export async function fetchRelatedPapers(paperId: string, limit: number = 10) {
   try {
     // Request citationCount for citing papers, strictly comma-separated, no spaces.
