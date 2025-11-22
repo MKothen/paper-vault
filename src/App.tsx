@@ -23,13 +23,14 @@ import { generatePDFThumbnail, extractPDFText, findDuplicatePapers, calculatePDF
 import { fetchSemanticScholarData, parseBibTeX, generateBibTeX, formatCitation } from './utils/citationUtils';
 import { calculateReadingStats, formatReadingTime, getTopItems } from './utils/analyticsUtils';
 
-// --- COMPONENT IMPORTS (NEW) ---
+// --- COMPONENT IMPORTS ---
 import { VirtualKanbanBoard } from './components/VirtualKanbanBoard';
 import { RelatedWorkFinder } from './components/RelatedWorkFinder';
 import { AuthorNetwork } from './components/AuthorNetwork';
 import { TagCloud } from './components/TagCloud';
 import { AISummary } from './components/AISummary';
 import { TOCSidebar } from './components/TOCSidebar';
+import { EnhancedMetadataModal } from './components/EnhancedMetadataModal';
 
 // Configure Worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -86,7 +87,6 @@ function App() {
   // Editing & Uploading State
   const [showMetadataModal, setShowMetadataModal] = useState(false);
   const [editingPaper, setEditingPaper] = useState(null);
-  const [editForm, setEditForm] = useState({});
   const fileInputRef = useRef(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(""); 
@@ -97,19 +97,6 @@ function App() {
   const [bibtexInput, setBibtexInput] = useState("");
   const [showBibtexModal, setShowBibtexModal] = useState(false);
 
-  // Manual Form State
-  const [newTitle, setNewTitle] = useState("");
-  const [newLink, setNewLink] = useState("");
-  const [newTags, setNewTags] = useState([]);
-  const [newColor, setNewColor] = useState(COLORS[0].class);
-  const [newAbstract, setNewAbstract] = useState("");
-  const [newAuthors, setNewAuthors] = useState("");
-  const [newYear, setNewYear] = useState("");
-  const [newVenue, setNewVenue] = useState("");
-  const [newMethods, setNewMethods] = useState([]);
-  const [newOrganisms, setNewOrganisms] = useState([]);
-  const [newRating, setNewRating] = useState(0);
-
   // Reader State
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -118,17 +105,14 @@ function App() {
   const [postits, setPostits] = useState([]);
   const [selectedColor, setSelectedColor] = useState(HIGHLIGHT_COLORS[0]);
   const [showSidebar, setShowSidebar] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState('toc'); // 'toc', 'notes', 'ai', 'related'
+  const [sidebarTab, setSidebarTab] = useState('toc');
   const [darkMode, setDarkMode] = useState(false);
   const [pomodoroTime, setPomodoroTime] = useState(25 * 60);
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
   const [isHighlightMode, setIsHighlightMode] = useState(false);
   const pomodoroRef = useRef(null);
   
-  // Graph Ref
   const graphRef = useRef();
-
-  // Reading stats
   const [readingStats, setReadingStats] = useState(null);
 
   // --- NOTIFICATION STATE ---
@@ -151,7 +135,6 @@ function App() {
       const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setPapers(loaded);
       
-      // Calculate reading stats
       if (typeof calculateReadingStats === 'function') {
         const stats = calculateReadingStats(loaded, []);
         setReadingStats(stats);
@@ -160,7 +143,6 @@ function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // ... (Existing Pomodoro and Annotation Loading Effects - Keeping them)
   useEffect(() => {
     if (pomodoroRunning && pomodoroTime > 0) {
       pomodoroRef.current = setInterval(() => setPomodoroTime(t => t - 1), 1000);
@@ -182,10 +164,7 @@ function App() {
     }
   }, [selectedPaper]);
 
-  // ... (Existing extractMetadata, handleDrop, processFile, handleBatchUpload functions - Keeping them)
-  // [Skipping for brevity - assume previous implementation of these functions is here]
   const extractMetadata = async (file) => {
-      // ... (same as before)
       const arrayBuffer = await file.arrayBuffer();
       const loadingTask = pdfjs.getDocument(arrayBuffer);
       const pdf = await loadingTask.promise;
@@ -250,7 +229,8 @@ function App() {
         userId: user.uid, title: metadata.title, link: "", tags: metadata.tags, color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
         status: "to-read", abstract: metadata.abstract, authors: metadata.authors, year: metadata.year, venue: metadata.venue,
         notes: "", pdfUrl: url, doi: metadata.doi || "", citationCount: metadata.citationCount || 0, pdfHash: metadata.pdfHash || "",
-        thumbnailUrl: thumbnailUrl, createdAt: Date.now(), addedDate: Date.now()
+        thumbnailUrl: thumbnailUrl, createdAt: Date.now(), addedDate: Date.now(),
+        rating: 0, methods: [], organisms: [], hypotheses: []
       });
   };
 
@@ -268,23 +248,29 @@ function App() {
     } else addToast("Please drop valid PDF files.", "error");
   };
   
-  const handleFileSelect = async (e) => { if (e.target.files?.length) { setIsUploading(true); for(let i=0; i<e.target.files.length; i++) await processFile(e.target.files[i]); setIsUploading(false); }};
+  const handleFileSelect = async (e) => { 
+    if (e.target.files?.length) { 
+      setIsUploading(true); 
+      for(let i=0; i<e.target.files.length; i++) await processFile(e.target.files[i]); 
+      setIsUploading(false); 
+    }
+  };
 
-  // ... (Existing fetchDoi, handleBibtexImport, addPaperManual, deletePaper functions - Keeping them)
-  const fetchDoi = async () => { /* ... */ }; // Assuming existing implementation
-  const handleBibtexImport = () => { /* ... */ }; // Assuming existing implementation
-  const addPaperManual = async (e) => { /* ... */ }; // Assuming existing implementation
-  const deletePaper = async (id) => { await deleteDoc(doc(db, "papers", id)); addToast("Paper deleted", "info"); setConfirmDialog({isOpen:false}); };
+  const deletePaper = (id) => {
+    setConfirmDialog({
+      isOpen: true,
+      message: "This will permanently delete the paper and all its annotations.",
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "papers", id));
+        addToast("Paper deleted", "info");
+        setConfirmDialog({ isOpen: false, message: "", onConfirm: null });
+      }
+    });
+  };
 
   const handleStatusChange = async (id, newStatus) => {
     await updateDoc(doc(db, "papers", id), { status: newStatus });
   };
-
-  // --- READER HELPERS ---
-  const handlePageClick = () => { /* ... existing implementation ... */ };
-  const addPostit = () => { /* ... existing implementation ... */ };
-  const updatePostit = (id, updates) => { /* ... existing implementation ... */ };
-  const deleteAnnotation = (id, type) => { /* ... existing implementation ... */ };
 
   const allUniqueTags = useMemo(() => {
     const tags = new Set();
@@ -297,13 +283,15 @@ function App() {
     return p.title.toLowerCase().includes(q) || p.tags?.some(t => t.toLowerCase().includes(q));
   });
 
-  // --- SHARED UI ---
   const SharedUI = () => (
     <>
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none">
         {toasts.map(toast => (
           <div key={toast.id} className={`pointer-events-auto flex items-center gap-3 p-4 bg-white border-4 border-black shadow-nb min-w-[300px] animate-in slide-in-from-right`}>
-            <Info className="text-blue-600" size={24} strokeWidth={3} />
+            {toast.type === 'success' && <Check className="text-green-600" size={24} strokeWidth={3} />}
+            {toast.type === 'error' && <AlertCircle className="text-red-600" size={24} strokeWidth={3} />}
+            {toast.type === 'info' && <Info className="text-blue-600" size={24} strokeWidth={3} />}
+            {toast.type === 'warning' && <AlertCircle className="text-yellow-600" size={24} strokeWidth={3} />}
             <p className="font-bold uppercase text-sm">{toast.message}</p>
           </div>
         ))}
@@ -314,20 +302,56 @@ function App() {
               <h2 className="text-2xl font-black uppercase mb-2">Are you sure?</h2>
               <p className="font-bold text-gray-600 mb-6">{confirmDialog.message}</p>
               <div className="flex gap-4">
-                 <button onClick={() => setConfirmDialog({ isOpen: false })} className="flex-1 nb-button bg-white">Cancel</button>
+                 <button onClick={() => setConfirmDialog({ isOpen: false, message: "", onConfirm: null })} className="flex-1 nb-button bg-white">Cancel</button>
                  <button onClick={confirmDialog.onConfirm} className="flex-1 nb-button bg-red-500 text-white border-black">Confirm</button>
               </div>
            </div>
         </div>
       )}
-      {/* ... BibTeX Modal and Paper Details Modal would go here ... */}
+      {showMetadataModal && editingPaper && (
+        <EnhancedMetadataModal
+          paper={editingPaper}
+          allTags={allUniqueTags}
+          onClose={() => {
+            setShowMetadataModal(false);
+            setEditingPaper(null);
+          }}
+          onSave={async (data) => {
+            await updateDoc(doc(db, "papers", editingPaper.id), {
+              ...data,
+              modifiedDate: Date.now()
+            });
+            addToast("Paper updated successfully!", "success");
+          }}
+          addToast={addToast}
+        />
+      )}
     </>
   );
 
-  if (!isAuthorized) return <div className="min-h-screen flex items-center justify-center bg-nb-yellow p-4"><div className="bg-white border-4 border-black shadow-nb p-8 max-w-md w-full text-center"><Lock className="w-12 h-12 mx-auto mb-4" strokeWidth={3} /><h1 className="text-3xl font-black uppercase mb-4">Restricted Access</h1><input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="nb-input text-center mb-4" placeholder="PASSWORD" /><button onClick={() => passwordInput === APP_PASSWORD && setIsAuthorized(true)} className="nb-button w-full">UNLOCK</button></div></div>;
-  if (!user) return <div className="min-h-screen flex items-center justify-center bg-nb-cyan p-4"><div className="bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-10 max-w-md w-full text-center"><BookOpen className="w-20 h-20 mx-auto mb-6" strokeWidth={3}/><h1 className="text-5xl font-black uppercase mb-2 tracking-tighter">Paper Vault</h1><button onClick={signInWithGoogle} className="w-full border-4 border-black bg-nb-pink p-4 font-black flex items-center justify-center gap-3 text-lg hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"><User strokeWidth={3} /> ENTER WITH GOOGLE</button></div></div>;
+  if (!isAuthorized) return (
+    <div className="min-h-screen flex items-center justify-center bg-nb-yellow p-4">
+      <div className="bg-white border-4 border-black shadow-nb p-8 max-w-md w-full text-center">
+        <Lock className="w-12 h-12 mx-auto mb-4" strokeWidth={3} />
+        <h1 className="text-3xl font-black uppercase mb-4">Restricted Access</h1>
+        <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="nb-input text-center mb-4" placeholder="PASSWORD" />
+        <button onClick={() => passwordInput === APP_PASSWORD && setIsAuthorized(true)} className="nb-button w-full">UNLOCK</button>
+      </div>
+    </div>
+  );
+  
+  if (!user) return (
+    <div className="min-h-screen flex items-center justify-center bg-nb-cyan p-4">
+      <div className="bg-white border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-10 max-w-md w-full text-center">
+        <BookOpen className="w-20 h-20 mx-auto mb-6" strokeWidth={3}/>
+        <h1 className="text-5xl font-black uppercase mb-2 tracking-tighter">Paper Vault</h1>
+        <button onClick={signInWithGoogle} className="w-full border-4 border-black bg-nb-pink p-4 font-black flex items-center justify-center gap-3 text-lg hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <User strokeWidth={3} /> ENTER WITH GOOGLE
+        </button>
+      </div>
+    </div>
+  );
 
-  // --- ANALYTICS VIEW (UPDATED) ---
   if (activeView === 'analytics' && readingStats) {
     return (
       <div className="h-screen flex flex-col bg-nb-gray">
@@ -364,12 +388,10 @@ function App() {
     );
   }
 
-  // --- READER VIEW (UPDATED WITH SIDEBAR) ---
   if (activeView === 'reader' && selectedPaper) {
     return (
       <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900 text-white' : 'bg-nb-yellow'}`}>
         <SharedUI />
-        {/* Header */}
         <div className={`${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-black'} border-b-4 p-3 flex justify-between items-center z-20`}>
           <div className="flex items-center gap-4">
             <button onClick={() => setActiveView('library')} className="nb-button flex gap-2 text-black"><ChevronLeft strokeWidth={3} /> Back</button>
@@ -385,19 +407,15 @@ function App() {
           </div>
         </div>
 
-        {/* Main Content */}
         <div className="flex-1 flex overflow-hidden relative">
-           {/* PDF Area */}
            <div className={`flex-1 overflow-auto p-8 flex justify-center bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px] ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
-              <div className="relative h-fit pdf-page-container" onMouseUp={handlePageClick}>
+              <div className="relative h-fit pdf-page-container">
                  <Document file={selectedPaper.pdfUrl} onLoadSuccess={({ numPages }) => setNumPages(numPages)} loading={<div className="flex items-center gap-2 font-bold bg-white p-4 border-4 border-black shadow-nb"><Loader2 className="animate-spin"/> Loading PDF...</div>}>
                     <Page pageNumber={pageNumber} scale={scale} renderTextLayer={true} renderAnnotationLayer={true} className="shadow-nb-lg" />
                  </Document>
-                 {/* Highlights & Postits Rendering Here */}
               </div>
            </div>
 
-           {/* Enhanced Sidebar */}
            {showSidebar && (
              <div className={`w-80 border-l-4 border-black flex flex-col ${darkMode ? 'bg-gray-800 text-white' : 'bg-white'}`}>
                 <div className="flex border-b-4 border-black bg-gray-100">
@@ -443,7 +461,6 @@ function App() {
     );
   }
 
-  // --- LIBRARY (KANBAN) VIEW (UPDATED) ---
   return (
     <div className="min-h-screen bg-nb-gray flex flex-col font-sans text-black">
       <SharedUI />
@@ -451,14 +468,11 @@ function App() {
         <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1></div>
         <div className="flex gap-4">
           <button onClick={() => setActiveView('analytics')} className="nb-button flex gap-2"><BarChart3 strokeWidth={3} /> Analytics</button>
-          <button onClick={() => setActiveView('graph')} className="nb-button flex gap-2"><Share2 strokeWidth={3} /> Graph</button>
           <button onClick={logout} className="nb-button flex gap-2"><LogOut strokeWidth={3} /> Exit</button>
         </div>
       </header>
       
-      {/* Toolbar */}
       <div className="bg-white border-b-4 border-black p-6 z-20">
-         {/* ... (Existing Input Mode Toggles & Search) ... */}
          <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-4">
                <button onClick={() => setInputMode('drop')} className={`text-sm font-black uppercase border-b-4 pb-1 ${inputMode === 'drop' ? 'border-nb-purple' : 'border-transparent'}`}>Smart Drop</button>
@@ -487,17 +501,19 @@ function App() {
          ) : (
             <div className="bg-nb-gray p-4 border-4 border-black flex gap-2">
                <input value={doiInput} onChange={e => setDoiInput(e.target.value)} className="nb-input flex-1" placeholder="Paste DOI..." />
-               <button onClick={fetchDoi} disabled={isFetching} className="nb-button bg-nb-purple flex gap-2">{isFetching ? <Loader2 className="animate-spin"/> : <Wand2/>} Auto-Fill</button>
+               <button disabled={isFetching} className="nb-button bg-nb-purple flex gap-2">{isFetching ? <Loader2 className="animate-spin"/> : <Wand2/>} Auto-Fill</button>
             </div>
          )}
       </div>
 
-      {/* VIRTUALIZED KANBAN BOARD */}
       <VirtualKanbanBoard 
         papers={filteredPapers} 
         onStatusChange={handleStatusChange}
         onRead={(p) => { setSelectedPaper(p); setActiveView('reader'); }}
-        onEdit={(p) => { setEditingPaper(p); setEditForm(p); setShowMetadataModal(true); }}
+        onEdit={(p) => { 
+          setEditingPaper(p); 
+          setShowMetadataModal(true); 
+        }}
         onDelete={deletePaper}
       />
     </div>
