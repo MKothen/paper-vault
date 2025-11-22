@@ -1,8 +1,8 @@
 // src/components/RelatedWorkFinder.tsx
 import React, { useState, useEffect } from 'react';
-import { fetchCitationData } from '../utils/semanticScholar';
+import { fetchCitationData, fetchRecommendedPapers } from '../utils/semanticScholar';
 import type { Paper } from '../types';
-import { Loader2, ExternalLink, Plus, RefreshCw } from 'lucide-react';
+import { Loader2, ExternalLink, Plus, RefreshCw, Sparkles, Library } from 'lucide-react';
 
 interface Props {
   currentPaper: Paper;
@@ -12,12 +12,21 @@ interface Props {
 export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
   const [related, setRelated] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<'references' | 'recommended'>('references');
 
   useEffect(() => {
     if (currentPaper.semanticScholarId || currentPaper.doi) {
-      loadReferences();
+      loadPapers();
     }
-  }, [currentPaper]);
+  }, [currentPaper, mode]);
+
+  const loadPapers = async () => {
+    if (mode === 'references') {
+      await loadReferences();
+    } else {
+      await loadRecommendations();
+    }
+  };
 
   const loadReferences = async () => {
     setLoading(true);
@@ -45,19 +54,85 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
     setLoading(false);
   };
 
+  const loadRecommendations = async () => {
+    setLoading(true);
+    
+    // Try to get the Semantic Scholar paper ID
+    let paperId = currentPaper.semanticScholarId;
+    
+    if (!paperId && currentPaper.doi) {
+      // If we don't have the paperId but we have DOI, fetch it first
+      const cleanDoi = currentPaper.doi.replace(/^DOI:/i, '');
+      const data = await fetchCitationData(cleanDoi);
+      paperId = data?.paperId;
+    }
+
+    if (!paperId) {
+      console.error('No Semantic Scholar ID available for recommendations');
+      setRelated([]);
+      setLoading(false);
+      return;
+    }
+
+    // Fetch recommended papers from Semantic Scholar
+    const recommendations = await fetchRecommendedPapers(paperId, 20, 'recent');
+    
+    // Transform to consistent format
+    const papers = recommendations.map((paper: any) => ({
+      paperId: paper.paperId,
+      title: paper.title,
+      authors: paper.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
+      year: paper.year,
+      abstract: paper.abstract,
+      venue: paper.venue,
+      citationCount: paper.citationCount || 0
+    })).filter(p => p.paperId && p.title);
+
+    setRelated(papers);
+    setLoading(false);
+  };
+
   return (
     <div className="bg-white border-4 border-black p-4 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
-        <h3 className="font-black uppercase">Top 20 Most-Cited References</h3>
-        <button onClick={loadReferences} className="p-1 hover:bg-gray-100 rounded">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMode('references')}
+            className={`px-3 py-1 text-xs font-bold uppercase border-2 border-black flex items-center gap-1 ${
+              mode === 'references' ? 'bg-nb-lime' : 'bg-white hover:bg-gray-100'
+            }`}
+          >
+            <Library size={14} />
+            References
+          </button>
+          <button
+            onClick={() => setMode('recommended')}
+            className={`px-3 py-1 text-xs font-bold uppercase border-2 border-black flex items-center gap-1 ${
+              mode === 'recommended' ? 'bg-nb-peach' : 'bg-white hover:bg-gray-100'
+            }`}
+          >
+            <Sparkles size={14} />
+            AI Recommended
+          </button>
+        </div>
+        <button onClick={loadPapers} className="p-1 hover:bg-gray-100 rounded">
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
+      
+      <div className="mb-2 text-xs text-gray-600">
+        {mode === 'references' 
+          ? 'Top 20 most-cited papers referenced by this paper'
+          : 'AI-recommended papers based on this paper\'s content'}
+      </div>
+      
       <div className="flex-1 overflow-y-auto space-y-3">
         {loading ? (
           <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
         ) : related.length === 0 ? (
-          <p className="text-gray-500 text-sm text-center italic">No references found.</p>
+          <p className="text-gray-500 text-sm text-center italic">
+            {mode === 'references' ? 'No references found.' : 'No recommendations available.'}
+          </p>
         ) : (
           related.map((paper, idx) => (
             <div key={paper.paperId || paper.title || idx} className="border-2 border-black p-3 hover:bg-gray-50 transition-colors">
