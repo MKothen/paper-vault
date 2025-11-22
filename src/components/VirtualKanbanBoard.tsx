@@ -45,16 +45,16 @@ const KanbanColumn = ({ id, title, items, onRead, onEdit, onDelete }: any) => {
   return (
     <Droppable droppableId={id}>
       {(provided, snapshot) => (
-        <div
-          ref={provided.innerRef}
-          {...provided.droppableProps}
-          className="flex-1 flex flex-col border-4 border-black bg-gray-100 h-full"
-        >
+        <div className="flex-1 flex flex-col border-4 border-black bg-gray-100 min-h-0">
           <div className="p-3 border-b-4 border-black bg-white font-black uppercase flex justify-between items-center shrink-0">
             <span>{title}</span>
             <span className="bg-black text-white px-2 py-0.5 rounded-full text-xs">{items.length}</span>
           </div>
-          <div className="flex-1 relative overflow-y-auto p-2 gap-2 flex flex-col">
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className="flex-1 overflow-y-auto p-2 gap-2 flex flex-col"
+          >
             {items.map((paper: Paper, idx: number) => (
               <Draggable key={paper.id} draggableId={paper.id} index={idx}>
                 {(provided, snapshot) => (
@@ -100,7 +100,7 @@ export function VirtualKanbanBoard({ papers, onStatusChange, onRead, onEdit, onD
 
   return (
     <DragDropContext onDragEnd={onDragEnd}>
-      <div className="flex-1 h-full overflow-hidden bg-nb-gray p-4 flex gap-4">
+      <div className="flex-1 flex gap-4 p-4 bg-nb-gray min-h-0 overflow-hidden">
         {columns.map((col) => (
           <KanbanColumn
             key={col.id}
