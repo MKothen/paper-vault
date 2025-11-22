@@ -1,11 +1,14 @@
 import type { CitationData } from '../types';
 
 const SEMANTIC_SCHOLAR_API = 'https://api.semanticscholar.org/graph/v1';
+const SEMANTIC_SCHOLAR_RECOMMENDATIONS_API = 'https://api.semanticscholar.org/recommendations/v1';
 
 export async function fetchCitationData(doi: string): Promise<CitationData | null> {
   try {
+    // Clean up the DOI - remove any existing "DOI:" prefix to avoid duplication
+    const cleanDoi = doi.replace(/^DOI:/i, '');
     const response = await fetch(
-      `${SEMANTIC_SCHOLAR_API}/paper/DOI:${doi}?fields=paperId,externalIds,title,citationCount,references,citations`
+      `${SEMANTIC_SCHOLAR_API}/paper/DOI:${cleanDoi}?fields=paperId,externalIds,title,citationCount,references,citations`
     );
     if (!response.ok) return null;
     return await response.json();
@@ -37,6 +40,74 @@ export async function fetchRelatedPapers(paperId: string, limit: number = 10) {
     return data.data || [];
   } catch (error) {
     console.error('Failed to fetch related papers:', error);
+    return [];
+  }
+}
+
+/**
+ * Get recommended papers using Semantic Scholar's Recommendations API
+ * @param paperId - The Semantic Scholar paper ID to get recommendations for
+ * @param limit - Number of recommendations to return (max 500, default 10)
+ * @param from - Which pool to recommend from: "recent" or "all-cs"
+ */
+export async function fetchRecommendedPapers(
+  paperId: string, 
+  limit: number = 10,
+  from: 'recent' | 'all-cs' = 'recent'
+) {
+  try {
+    const fields = 'paperId,title,authors,year,abstract,venue,citationCount,externalIds';
+    const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers/forpaper/${paperId}?fields=${fields}&limit=${limit}&from=${from}`;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error('Recommendations API error:', response.status, response.statusText, url);
+      return [];
+    }
+    
+    const data = await response.json();
+    return data.recommendedPapers || [];
+  } catch (error) {
+    console.error('Failed to fetch recommended papers:', error);
+    return [];
+  }
+}
+
+/**
+ * Get recommended papers using multiple positive and/or negative example papers
+ * @param positivePaperIds - Array of Semantic Scholar paper IDs for positive examples
+ * @param negativePaperIds - Array of Semantic Scholar paper IDs for negative examples (optional)
+ * @param limit - Number of recommendations to return (max 500, default 100)
+ */
+export async function fetchRecommendedPapersMultiple(
+  positivePaperIds: string[],
+  negativePaperIds: string[] = [],
+  limit: number = 100
+) {
+  try {
+    const fields = 'paperId,title,authors,year,abstract,venue,citationCount,externalIds';
+    const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers?fields=${fields}&limit=${limit}`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        positivePaperIds,
+        negativePaperIds
+      })
+    });
+    
+    if (!response.ok) {
+      console.error('Recommendations API error:', response.status, response.statusText);
+      return [];
+    }
+    
+    const data = await response.json();
+    return data.recommendedPapers || [];
+  } catch (error) {
+    console.error('Failed to fetch recommended papers:', error);
     return [];
   }
 }
