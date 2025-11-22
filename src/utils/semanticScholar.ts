@@ -43,7 +43,7 @@ export async function fetchCitationsWithMetadata(paperId: string, limit: number 
 
 export async function fetchRecommendedPapers(
   paperId: string, 
-  limit: number = 500, // Max is 500 for recommendations API
+  limit: number = 200, // Max is 500 for recommendations API
   from: 'recent' | 'all-cs' = 'recent'
 ) {
   try {
@@ -68,7 +68,7 @@ export async function fetchRecommendedPapers(
 export async function fetchRecommendedPapersMultiple(
   positivePaperIds: string[],
   negativePaperIds: string[] = [],
-  limit: number = 500 // Max is 500 for recommendations API
+  limit: number = 200 // Max is 500 for recommendations API
 ) {
   try {
     const fields = 'paperId,title,authors,year,venue,citationCount';
