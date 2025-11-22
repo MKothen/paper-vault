@@ -1,6 +1,6 @@
 // src/components/RelatedWorkFinder.tsx
 import React, { useState, useEffect } from 'react';
-import { fetchCitationData, fetchRecommendedPapers, fetchReferencesWithMetadata } from '../utils/semanticScholar';
+import { fetchCitationData, fetchRecommendedPapers, fetchCitationsWithMetadata } from '../utils/semanticScholar';
 import type { Paper } from '../types';
 import { Loader2, ExternalLink, Plus, RefreshCw, Sparkles, Library } from 'lucide-react';
 
@@ -12,7 +12,7 @@ interface Props {
 export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
   const [related, setRelated] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<'references' | 'recommended'>('references');
+  const [mode, setMode] = useState<'citedby' | 'recommended'>('citedby');
 
   useEffect(() => {
     if (currentPaper.semanticScholarId || currentPaper.doi) {
@@ -21,52 +21,42 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
   }, [currentPaper, mode]);
 
   const loadPapers = async () => {
-    if (mode === 'references') {
-      await loadReferences();
+    if (mode === 'citedby') {
+      await loadCitedBy();
     } else {
       await loadRecommendations();
     }
   };
 
-  const loadReferences = async () => {
+  const loadCitedBy = async () => {
     setLoading(true);
     
-    // Try to get the Semantic Scholar paper ID
     let paperId = currentPaper.semanticScholarId;
-    
     if (!paperId && currentPaper.doi) {
-      // If we don't have the paperId but we have DOI, fetch it first
       const cleanDoi = currentPaper.doi.replace(/^DOI:/i, '');
       const data = await fetchCitationData(cleanDoi);
       paperId = data?.paperId;
     }
-
     if (!paperId) {
-      console.error('No Semantic Scholar ID available for references');
+      console.error('No Semantic Scholar ID for cited-by mode');
       setRelated([]);
       setLoading(false);
       return;
     }
-
-    // Fetch the references (papers cited BY the current paper) with full metadata
-    const referencesData = await fetchReferencesWithMetadata(paperId, 100);
-    
-    // Transform and filter the data
-    let papers = referencesData.map((item: any) => {
-      const ref = item.citedPaper;
-      if (!ref) return null;
+    const citationsData = await fetchCitationsWithMetadata(paperId, 1000);
+    let papers = citationsData.map((item: any) => {
+      const cite = item.citingPaper;
+      if (!cite) return null;
       return {
-        paperId: ref.paperId,
-        title: ref.title,
-        authors: ref.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
-        year: ref.year,
-        abstract: ref.abstract,
-        venue: ref.venue,
-        citationCount: ref.citationCount || 0
+        paperId: cite.paperId,
+        title: cite.title,
+        authors: cite.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
+        year: cite.year,
+        abstract: cite.abstract,
+        venue: cite.venue,
+        citationCount: cite.citationCount || 0
       };
     }).filter(p => p && p.paperId && p.title);
-    
-    // Sort by citation count (highest first) and take top 20
     papers.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
     setRelated(papers.slice(0, 20));
     setLoading(false);
@@ -74,28 +64,19 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
 
   const loadRecommendations = async () => {
     setLoading(true);
-    
-    // Try to get the Semantic Scholar paper ID
     let paperId = currentPaper.semanticScholarId;
-    
     if (!paperId && currentPaper.doi) {
-      // If we don't have the paperId but we have DOI, fetch it first
       const cleanDoi = currentPaper.doi.replace(/^DOI:/i, '');
       const data = await fetchCitationData(cleanDoi);
       paperId = data?.paperId;
     }
-
     if (!paperId) {
-      console.error('No Semantic Scholar ID available for recommendations');
+      console.error('No Semantic Scholar ID for recommendations');
       setRelated([]);
       setLoading(false);
       return;
     }
-
-    // Fetch recommended papers from Semantic Scholar (get more to ensure we have enough after filtering)
-    const recommendations = await fetchRecommendedPapers(paperId, 100, 'recent');
-    
-    // Transform to consistent format
+    const recommendations = await fetchRecommendedPapers(paperId, 1000, 'recent');
     let papers = recommendations.map((paper: any) => ({
       paperId: paper.paperId,
       title: paper.title,
@@ -105,8 +86,6 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       venue: paper.venue,
       citationCount: paper.citationCount || 0
     })).filter(p => p.paperId && p.title);
-
-    // Sort by citation count (highest first) and take top 20
     papers.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
     setRelated(papers.slice(0, 20));
     setLoading(false);
@@ -117,13 +96,13 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       <div className="flex justify-between items-center mb-4 border-b-2 border-black pb-2">
         <div className="flex gap-2">
           <button
-            onClick={() => setMode('references')}
+            onClick={() => setMode('citedby')}
             className={`px-3 py-1 text-xs font-bold uppercase border-2 border-black flex items-center gap-1 ${
-              mode === 'references' ? 'bg-nb-lime' : 'bg-white hover:bg-gray-100'
+              mode === 'citedby' ? 'bg-nb-lime' : 'bg-white hover:bg-gray-100'
             }`}
           >
             <Library size={14} />
-            References
+            Cited By
           </button>
           <button
             onClick={() => setMode('recommended')}
@@ -139,19 +118,17 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
-      
       <div className="mb-2 text-xs text-gray-600">
-        {mode === 'references' 
-          ? 'Top 20 most-cited papers referenced by this paper'
-          : 'Top 20 most-cited AI-recommended papers based on this paper\'s content'}
+        {mode === 'citedby' 
+          ? 'Top 20 most-cited papers that cite this paper'
+          : 'Top 20 most-cited AI-recommended papers for this paper'}
       </div>
-      
       <div className="flex-1 overflow-y-auto space-y-3">
         {loading ? (
           <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
         ) : related.length === 0 ? (
           <p className="text-gray-500 text-sm text-center italic">
-            {mode === 'references' ? 'No references found.' : 'No recommendations available.'}
+            {mode === 'citedby' ? 'No citing papers found.' : 'No recommendations available.'}
           </p>
         ) : (
           related.map((paper, idx) => (
