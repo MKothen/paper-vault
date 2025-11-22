@@ -67,7 +67,7 @@ export async function fetchRecommendedPapers(
 export async function fetchRecommendedPapersMultiple(
   positivePaperIds: string[],
   negativePaperIds: string[] = [],
-  limit: number = 1000
+  limit: number = 500
 ) {
   try {
     const fields = 'paperId,title,authors,year,abstract,venue,citationCount,externalIds';
