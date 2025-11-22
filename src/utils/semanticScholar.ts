@@ -43,13 +43,15 @@ export async function fetchCitationsWithMetadata(paperId: string, limit: number 
 
 export async function fetchRecommendedPapers(
   paperId: string, 
-  limit: number = 200, // Max is 500 for recommendations API
-  from: 'recent' | 'all-cs' = 'recent'
+  limit: number = 100 // Recommendations API supports up to 500
 ) {
   try {
-    // Removed abstract and externalIds for better performance
+    // The recommendations API only accepts 'fields' and 'limit' parameters
+    // Valid fields: paperId, externalIds, url, title, abstract, venue, year, 
+    //               referenceCount, citationCount, influentialCitationCount,
+    //               isOpenAccess, fieldsOfStudy, authors
     const fields = 'paperId,title,authors,year,venue,citationCount';
-    const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers/forpaper/${paperId}?fields=${fields}&limit=${limit}&from=${from}`;
+    const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers/forpaper/${paperId}?fields=${fields}&limit=${limit}`;
     
     const response = await fetch(url);
     if (!response.ok) {
@@ -68,7 +70,7 @@ export async function fetchRecommendedPapers(
 export async function fetchRecommendedPapersMultiple(
   positivePaperIds: string[],
   negativePaperIds: string[] = [],
-  limit: number = 200 // Max is 500 for recommendations API
+  limit: number = 100 // Max is 500 for recommendations API
 ) {
   try {
     const fields = 'paperId,title,authors,year,venue,citationCount';
