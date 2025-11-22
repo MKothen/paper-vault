@@ -1,6 +1,6 @@
 // src/components/RelatedWorkFinder.tsx
 import React, { useState, useEffect } from 'react';
-import { fetchCitationData, fetchRecommendedPapers } from '../utils/semanticScholar';
+import { fetchCitationData, fetchRecommendedPapers, fetchReferencesWithMetadata } from '../utils/semanticScholar';
 import type { Paper } from '../types';
 import { Loader2, ExternalLink, Plus, RefreshCw, Sparkles, Library } from 'lucide-react';
 
@@ -30,14 +30,31 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
 
   const loadReferences = async () => {
     setLoading(true);
-    const id = currentPaper.semanticScholarId || `DOI:${currentPaper.doi}`;
-    // Fetch the references (papers cited BY the current paper)
-    const data = await fetchCitationData(id);
-    // Defensive: references array may be missing or empty
-    let refList = (data && Array.isArray(data.references)) ? data.references : [];
-    // Unpack reference paper details and robustly guard on values, default citationCount to 0
-    let papers = refList.map((item: any) => {
-      const ref = item.reference || item;
+    
+    // Try to get the Semantic Scholar paper ID
+    let paperId = currentPaper.semanticScholarId;
+    
+    if (!paperId && currentPaper.doi) {
+      // If we don't have the paperId but we have DOI, fetch it first
+      const cleanDoi = currentPaper.doi.replace(/^DOI:/i, '');
+      const data = await fetchCitationData(cleanDoi);
+      paperId = data?.paperId;
+    }
+
+    if (!paperId) {
+      console.error('No Semantic Scholar ID available for references');
+      setRelated([]);
+      setLoading(false);
+      return;
+    }
+
+    // Fetch the references (papers cited BY the current paper) with full metadata
+    const referencesData = await fetchReferencesWithMetadata(paperId, 100);
+    
+    // Transform and filter the data
+    let papers = referencesData.map((item: any) => {
+      const ref = item.citedPaper;
+      if (!ref) return null;
       return {
         paperId: ref.paperId,
         title: ref.title,
@@ -46,9 +63,10 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
         abstract: ref.abstract,
         venue: ref.venue,
         citationCount: ref.citationCount || 0
-      }
-    }).filter(p => p.paperId && p.title);
-    // Sort by citation count (highest first)
+      };
+    }).filter(p => p && p.paperId && p.title);
+    
+    // Sort by citation count (highest first) and take top 20
     papers.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
     setRelated(papers.slice(0, 20));
     setLoading(false);
@@ -74,11 +92,11 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       return;
     }
 
-    // Fetch recommended papers from Semantic Scholar
-    const recommendations = await fetchRecommendedPapers(paperId, 20, 'recent');
+    // Fetch recommended papers from Semantic Scholar (get more to ensure we have enough after filtering)
+    const recommendations = await fetchRecommendedPapers(paperId, 100, 'recent');
     
     // Transform to consistent format
-    const papers = recommendations.map((paper: any) => ({
+    let papers = recommendations.map((paper: any) => ({
       paperId: paper.paperId,
       title: paper.title,
       authors: paper.authors?.map((a: any) => a.name).join(', ') || 'Unknown',
@@ -88,7 +106,9 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       citationCount: paper.citationCount || 0
     })).filter(p => p.paperId && p.title);
 
-    setRelated(papers);
+    // Sort by citation count (highest first) and take top 20
+    papers.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
+    setRelated(papers.slice(0, 20));
     setLoading(false);
   };
 
@@ -123,7 +143,7 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       <div className="mb-2 text-xs text-gray-600">
         {mode === 'references' 
           ? 'Top 20 most-cited papers referenced by this paper'
-          : 'AI-recommended papers based on this paper\'s content'}
+          : 'Top 20 most-cited AI-recommended papers based on this paper\'s content'}
       </div>
       
       <div className="flex-1 overflow-y-auto space-y-3">
