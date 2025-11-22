@@ -5,11 +5,8 @@ const SEMANTIC_SCHOLAR_RECOMMENDATIONS_API = 'https://api.semanticscholar.org/re
 
 export async function fetchCitationData(doi: string): Promise<CitationData | null> {
   try {
-    // Clean up the DOI - remove any existing "DOI:" prefix to avoid duplication
     const cleanDoi = doi.replace(/^DOI:/i, '');
-    const response = await fetch(
-      `${SEMANTIC_SCHOLAR_API}/paper/DOI:${cleanDoi}?fields=paperId,externalIds,title,citationCount,references,citations`
-    );
+    const response = await fetch(`${SEMANTIC_SCHOLAR_API}/paper/DOI:${cleanDoi}?fields=paperId,externalIds,title,citationCount,references,citations`);
     if (!response.ok) return null;
     return await response.json();
   } catch (error) {
@@ -18,40 +15,10 @@ export async function fetchCitationData(doi: string): Promise<CitationData | nul
   }
 }
 
-/**
- * Fetch references (papers cited BY the given paper) with full metadata
- * @param paperId - The Semantic Scholar paper ID
- * @param limit - Number of references to return (max 1000)
- */
-export async function fetchReferencesWithMetadata(paperId: string, limit: number = 100) {
+// Returns papers that cite the given paper with full metadata
+export async function fetchCitationsWithMetadata(paperId: string, limit: number = 1000) {
   try {
-    const queryFields = [
-      'citedPaper.paperId',
-      'citedPaper.title',
-      'citedPaper.authors',
-      'citedPaper.year',
-      'citedPaper.abstract',
-      'citedPaper.venue',
-      'citedPaper.citationCount'
-    ].join(',');
-    const url = `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/references?fields=${queryFields}&limit=${limit}`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error('Semantic Scholar API error:', response.status, response.statusText, url);
-      return [];
-    }
-    const data = await response.json();
-    return data.data || [];
-  } catch (error) {
-    console.error('Failed to fetch references:', error);
-    return [];
-  }
-}
-
-export async function fetchRelatedPapers(paperId: string, limit: number = 10) {
-  try {
-    // Request citationCount for citing papers, strictly comma-separated, no spaces.
-    const queryFields = [
+    const fields = [
       'citingPaper.paperId',
       'citingPaper.title',
       'citingPaper.authors',
@@ -60,7 +27,7 @@ export async function fetchRelatedPapers(paperId: string, limit: number = 10) {
       'citingPaper.venue',
       'citingPaper.citationCount'
     ].join(',');
-    const url = `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/citations?fields=${queryFields}&limit=${limit}`;
+    const url = `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/citations?fields=${fields}&limit=${limit}`;
     const response = await fetch(url);
     if (!response.ok) {
       console.error('Semantic Scholar API error:', response.status, response.statusText, url);
@@ -69,20 +36,14 @@ export async function fetchRelatedPapers(paperId: string, limit: number = 10) {
     const data = await response.json();
     return data.data || [];
   } catch (error) {
-    console.error('Failed to fetch related papers:', error);
+    console.error('Failed to fetch citations:', error);
     return [];
   }
 }
 
-/**
- * Get recommended papers using Semantic Scholar's Recommendations API
- * @param paperId - The Semantic Scholar paper ID to get recommendations for
- * @param limit - Number of recommendations to return (max 500, default 10)
- * @param from - Which pool to recommend from: "recent" or "all-cs"
- */
 export async function fetchRecommendedPapers(
   paperId: string, 
-  limit: number = 10,
+  limit: number = 1000,
   from: 'recent' | 'all-cs' = 'recent'
 ) {
   try {
@@ -103,16 +64,10 @@ export async function fetchRecommendedPapers(
   }
 }
 
-/**
- * Get recommended papers using multiple positive and/or negative example papers
- * @param positivePaperIds - Array of Semantic Scholar paper IDs for positive examples
- * @param negativePaperIds - Array of Semantic Scholar paper IDs for negative examples (optional)
- * @param limit - Number of recommendations to return (max 500, default 100)
- */
 export async function fetchRecommendedPapersMultiple(
   positivePaperIds: string[],
   negativePaperIds: string[] = [],
-  limit: number = 100
+  limit: number = 1000
 ) {
   try {
     const fields = 'paperId,title,authors,year,abstract,venue,citationCount,externalIds';
