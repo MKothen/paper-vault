@@ -43,7 +43,8 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       setLoading(false);
       return;
     }
-    const citationsData = await fetchCitationsWithMetadata(paperId, 1000);
+    // Use 100 (API limit for citations with full metadata)
+    const citationsData = await fetchCitationsWithMetadata(paperId, 100);
     let papers = citationsData.map((item: any) => {
       const cite = item.citingPaper;
       if (!cite) return null;
@@ -76,7 +77,8 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       setLoading(false);
       return;
     }
-    const recommendations = await fetchRecommendedPapers(paperId, 1000, 'recent');
+    // Use 500 (max limit for recommendations API)
+    const recommendations = await fetchRecommendedPapers(paperId, 500, 'recent');
     let papers = recommendations.map((paper: any) => ({
       paperId: paper.paperId,
       title: paper.title,
