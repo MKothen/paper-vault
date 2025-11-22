@@ -16,7 +16,7 @@ export async function fetchCitationData(doi: string): Promise<CitationData | nul
 }
 
 // Returns papers that cite the given paper with full metadata
-export async function fetchCitationsWithMetadata(paperId: string, limit: number = 1000) {
+export async function fetchCitationsWithMetadata(paperId: string, limit: number = 100) {
   try {
     const fields = [
       'citingPaper.paperId',
@@ -43,7 +43,7 @@ export async function fetchCitationsWithMetadata(paperId: string, limit: number 
 
 export async function fetchRecommendedPapers(
   paperId: string, 
-  limit: number = 1000,
+  limit: number = 500,
   from: 'recent' | 'all-cs' = 'recent'
 ) {
   try {
