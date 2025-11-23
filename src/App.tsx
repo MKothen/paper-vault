@@ -289,6 +289,23 @@ function App() {
     });
   };
 
+  // Handler for importing related papers
+  const handleImportPaper = async (newPaperData) => {
+    if (!user) return;
+    await addDoc(collection(db, "papers"), {
+      userId: user.uid,
+      title: newPaperData.title,
+      status: "to-read",
+      color: COLORS[0].class,
+      tags: [],
+      structuredNotes: {},
+      ...newPaperData,
+      createdAt: Date.now(),
+      addedDate: Date.now()
+    });
+    addToast("Paper added to To-Read", "success");
+  };
+
   const SharedUI = () => (
     <>
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none">
@@ -404,6 +421,7 @@ function App() {
           onClose={() => setActiveView('library')}
           onUpdate={handlePaperUpdate}
           papers={papers}
+          onImportPaper={handleImportPaper}
         />
       </>
     );
