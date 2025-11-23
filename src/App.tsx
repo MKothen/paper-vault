@@ -21,7 +21,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 
 // --- UTILITY IMPORTS ---
 import { generatePDFThumbnail, extractPDFText, findDuplicatePapers, calculatePDFHash } from './utils/pdfUtils';
-import { fetchSemanticScholarData, parseBibTeX, generateBibTeX, formatCitation } from './utils/citationUtils';
+import { fetchSemanticScholarData, parseBibTeX, generateBibTeX, formatCitation, normalizeDOI } from './utils/citationUtils';
 import { calculateReadingStats, formatReadingTime, getTopItems } from './utils/analyticsUtils';
 import { sm2Review, initializeSRS, getDuePapers } from './utils/srs';
 
@@ -241,6 +241,84 @@ function App() {
       for(let i=0; i<e.target.files.length; i++) await processFile(e.target.files[i]); 
       setIsUploading(false); 
     }
+  };
+
+  // Handler for DOI auto-fill functionality
+  const handleDOIAutoFill = async () => {
+    if (!doiInput.trim()) {
+      addToast("Please enter a DOI", "error");
+      return;
+    }
+
+    setIsFetching(true);
+    try {
+      // Normalize the DOI input (handles all formats)
+      const cleanDoi = normalizeDOI(doiInput);
+      
+      if (!cleanDoi) {
+        addToast("Invalid DOI format. Use formats like: 10.xxxx/xxxx or https://doi.org/10.xxxx/xxxx", "error");
+        setIsFetching(false);
+        return;
+      }
+
+      addToast(`Fetching metadata for DOI: ${cleanDoi}...`, "info");
+      
+      // Fetch metadata from Semantic Scholar
+      const citationData = await fetchSemanticScholarData(cleanDoi, 'DOI');
+      
+      if (citationData && !citationData.error) {
+        // Extract authors
+        let authorsString = "";
+        if (citationData.authors && Array.isArray(citationData.authors)) {
+          authorsString = citationData.authors.map(author => author.name).join(", ");
+        }
+        
+        // Extract year
+        let yearString = "";
+        if (citationData.year) {
+          yearString = citationData.year.toString();
+        } else if (citationData.publicationDate) {
+          yearString = citationData.publicationDate.split('-')[0];
+        }
+        
+        // Create paper with fetched metadata
+        await addDoc(collection(db, "papers"), {
+          userId: user.uid,
+          title: citationData.title || "Untitled Paper",
+          authors: authorsString,
+          abstract: citationData.abstract || "",
+          year: yearString || new Date().getFullYear().toString(),
+          venue: citationData.venue || "",
+          doi: cleanDoi,
+          citationCount: citationData.citationCount || 0,
+          semanticScholarId: citationData.paperId,
+          tags: generateSmartTags(citationData.title + " " + (citationData.abstract || "")),
+          color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
+          status: "to-read",
+          link: `https://doi.org/${cleanDoi}`,
+          notes: "",
+          pdfUrl: "",
+          thumbnailUrl: "",
+          createdAt: Date.now(),
+          addedDate: Date.now(),
+          rating: 0,
+          methods: [],
+          organisms: [],
+          hypotheses: [],
+          structuredNotes: {}
+        });
+        
+        addToast("Paper added successfully with full metadata!", "success");
+        setDoiInput(""); // Clear the input
+      } else {
+        addToast("Could not fetch metadata for this DOI. Please check the DOI or try manual entry.", "error");
+      }
+    } catch (error) {
+      console.error('Error fetching DOI metadata:', error);
+      addToast("Error fetching metadata. Please try again.", "error");
+    }
+    
+    setIsFetching(false);
   };
 
   const deletePaper = (id) => {
@@ -537,9 +615,28 @@ function App() {
                <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" multiple onChange={handleFileSelect} />
             </div>
          ) : (
-            <div className="bg-nb-gray p-4 border-4 border-black flex gap-2">
-               <input value={doiInput} onChange={e => setDoiInput(e.target.value)} className="nb-input flex-1" placeholder="Paste DOI..." />
-               <button disabled={isFetching} className="nb-button bg-nb-purple flex gap-2">{isFetching ? <Loader2 className="animate-spin"/> : <Wand2/>} Auto-Fill</button>
+            <div className="bg-nb-gray p-4 border-4 border-black">
+               <p className="text-xs font-bold text-gray-600 mb-2 uppercase">
+                  Supports: 10.xxxx/xxxx | https://doi.org/10.xxxx/xxxx | https://www.doi.org/10.xxxx/xxxx
+               </p>
+               <div className="flex gap-2">
+                  <input 
+                    value={doiInput} 
+                    onChange={e => setDoiInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleDOIAutoFill(); }}
+                    className="nb-input flex-1" 
+                    placeholder="Paste DOI here..." 
+                    disabled={isFetching}
+                  />
+                  <button 
+                    onClick={handleDOIAutoFill}
+                    disabled={isFetching} 
+                    className="nb-button bg-nb-purple flex gap-2"
+                  >
+                    {isFetching ? <Loader2 className="animate-spin"/> : <Wand2/>} 
+                    {isFetching ? 'Fetching...' : 'Auto-Fill'}
+                  </button>
+               </div>
             </div>
          )}
       </div>
