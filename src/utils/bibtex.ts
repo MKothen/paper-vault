@@ -1,4 +1,4 @@
-import type { Paper } from '../types';
+import { Paper } from '../types';
 
 // Simple BibTeX parser
 export function parseBibTeX(bibtex: string): Partial<Paper> | null {

@@ -43,8 +43,7 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       setLoading(false);
       return;
     }
-    
-    // Fetch papers that cite this paper (limit 100 for performance)
+    // Use 100 (API limit for citations with full metadata)
     const citationsData = await fetchCitationsWithMetadata(paperId, 100);
     let papers = citationsData.map((item: any) => {
       const cite = item.citingPaper;
@@ -59,8 +58,6 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
         citationCount: cite.citationCount || 0
       };
     }).filter(p => p && p.paperId && p.title);
-    
-    // Sort by citation count and take top 20
     papers.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
     setRelated(papers.slice(0, 20));
     setLoading(false);
@@ -68,7 +65,6 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
 
   const loadRecommendations = async () => {
     setLoading(true);
-    
     let paperId = currentPaper.semanticScholarId;
     if (!paperId && currentPaper.doi) {
       const cleanDoi = currentPaper.doi.replace(/^DOI:/i, '');
@@ -81,9 +77,8 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       setLoading(false);
       return;
     }
-    
-    // Fetch AI-recommended papers (limit 500 - API maximum)
-    const recommendations = await fetchRecommendedPapers(paperId, 500);
+    // Use 500 (max limit for recommendations API)
+    const recommendations = await fetchRecommendedPapers(paperId, 500, 'recent');
     let papers = recommendations.map((paper: any) => ({
       paperId: paper.paperId,
       title: paper.title,
@@ -93,8 +88,6 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
       venue: paper.venue,
       citationCount: paper.citationCount || 0
     })).filter(p => p.paperId && p.title);
-    
-    // Sort by citation count and take top 20
     papers.sort((a, b) => (b.citationCount || 0) - (a.citationCount || 0));
     setRelated(papers.slice(0, 20));
     setLoading(false);
@@ -127,13 +120,11 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
-      
       <div className="mb-2 text-xs text-gray-600">
         {mode === 'citedby' 
           ? 'Top 20 most-cited papers that cite this paper'
           : 'Top 20 most-cited AI-recommended papers for this paper'}
       </div>
-      
       <div className="flex-1 overflow-y-auto space-y-3">
         {loading ? (
           <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>
