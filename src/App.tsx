@@ -9,7 +9,7 @@ import {
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
   Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
-  Info, LayoutGrid, BarChart3, Download, FileText, Menu, ChevronRight
+  Info, LayoutGrid, BarChart3, Download, FileText, Menu
 } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 
@@ -104,7 +104,7 @@ function App() {
   const [highlights, setHighlights] = useState([]);
   const [postits, setPostits] = useState([]);
   const [selectedColor, setSelectedColor] = useState(HIGHLIGHT_COLORS[0]);
-  const [showSidebar, setShowSidebar] = useState(true); // Default true for desktop
+  const [showSidebar, setShowSidebar] = useState(false); // Default to false on mobile
   const [sidebarTab, setSidebarTab] = useState('toc');
   const [darkMode, setDarkMode] = useState(false);
   const [pomodoroTime, setPomodoroTime] = useState(25 * 60);
@@ -125,38 +125,6 @@ function App() {
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4000);
-  };
-
-  // Keyboard navigation for PDF reader
-  useEffect(() => {
-    if (activeView !== 'reader') return;
-    
-    const handleKeyDown = (e) => {
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        goToPreviousPage();
-      } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        goToNextPage();
-      } else if (e.key === '+' || e.key === '=') {
-        e.preventDefault();
-        setScale(s => Math.min(s + 0.2, 3.0));
-      } else if (e.key === '-' || e.key === '_') {
-        e.preventDefault();
-        setScale(s => Math.max(s - 0.2, 0.5));
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeView, pageNumber, numPages]);
-
-  const goToPreviousPage = () => {
-    setPageNumber(prev => Math.max(prev - 1, 1));
-  };
-
-  const goToNextPage = () => {
-    setPageNumber(prev => Math.min(prev + 1, numPages || prev));
   };
 
   // --- DATA & AUTH ---
@@ -192,11 +160,7 @@ function App() {
       setHighlights(h ? JSON.parse(h) : []);
       setPostits(p ? JSON.parse(p) : []);
       setPageNumber(1);
-      setIsHighlightMode(false);
-      // Auto-show sidebar on desktop when opening a paper
-      if (typeof window !== 'undefined' && window.innerWidth >= 768) {
-        setShowSidebar(true);
-      }
+      setIsHighlightMode(false); 
     }
   }, [selectedPaper]);
 
@@ -433,10 +397,10 @@ function App() {
             <button onClick={() => setActiveView('library')} className="nb-button flex gap-1 md:gap-2 text-black text-xs md:text-base shrink-0"><ChevronLeft strokeWidth={3} size={18} /> Back</button>
             <h2 className="font-black text-sm md:text-xl uppercase truncate tracking-tight text-black">{selectedPaper.title}</h2>
           </div>
-          <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+          <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto justify-between sm:justify-end">
             <button 
               onClick={() => setShowSidebar(!showSidebar)} 
-              className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm"
+              className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm md:hidden"
               title="Toggle Sidebar"
             >
               <Menu strokeWidth={3} size={18} />
@@ -451,79 +415,10 @@ function App() {
         </div>
 
         <div className="flex-1 flex overflow-hidden relative">
-           <div className={`flex-1 overflow-auto p-2 md:p-8 flex flex-col items-center bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px] ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
-              {/* PDF Navigation Controls */}
-              <div className="sticky top-2 z-10 mb-4 flex items-center gap-2 bg-white border-3 border-black shadow-nb p-2">
-                <button 
-                  onClick={goToPreviousPage}
-                  disabled={pageNumber <= 1}
-                  className="nb-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Previous Page (←)"
-                >
-                  <ChevronLeft size={20} strokeWidth={3} />
-                </button>
-                
-                <div className="flex items-center gap-2 px-3">
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max={numPages || 1}
-                    value={pageNumber}
-                    onChange={(e) => {
-                      const page = parseInt(e.target.value);
-                      if (page >= 1 && page <= (numPages || 1)) {
-                        setPageNumber(page);
-                      }
-                    }}
-                    className="w-16 text-center border-2 border-black px-2 py-1 font-bold"
-                  />
-                  <span className="font-bold text-sm">/ {numPages || '?'}</span>
-                </div>
-                
-                <button 
-                  onClick={goToNextPage}
-                  disabled={pageNumber >= (numPages || 1)}
-                  className="nb-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Next Page (→)"
-                >
-                  <ChevronRight size={20} strokeWidth={3} />
-                </button>
-
-                <div className="border-l-2 border-black h-8 mx-2"></div>
-
-                <button 
-                  onClick={() => setScale(s => Math.max(s - 0.2, 0.5))}
-                  className="nb-button p-2"
-                  title="Zoom Out (-)"
-                >
-                  <ZoomOut size={20} strokeWidth={3} />
-                </button>
-                
-                <span className="font-bold text-sm px-2">{Math.round(scale * 100)}%</span>
-                
-                <button 
-                  onClick={() => setScale(s => Math.min(s + 0.2, 3.0))}
-                  className="nb-button p-2"
-                  title="Zoom In (+)"
-                >
-                  <ZoomIn size={20} strokeWidth={3} />
-                </button>
-              </div>
-
+           <div className={`flex-1 overflow-auto p-2 md:p-8 flex justify-center bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px] ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
               <div className="relative h-fit pdf-page-container">
-                 <Document 
-                   file={selectedPaper.pdfUrl} 
-                   onLoadSuccess={({ numPages }) => setNumPages(numPages)} 
-                   loading={<div className="flex items-center gap-2 font-bold bg-white p-3 md:p-4 border-3 md:border-4 border-black shadow-nb text-sm"><Loader2 className="animate-spin"/> Loading PDF...</div>}
-                 >
-                    <Page 
-                      pageNumber={pageNumber} 
-                      scale={scale} 
-                      renderTextLayer={true} 
-                      renderAnnotationLayer={true} 
-                      className="shadow-nb-lg" 
-                      width={typeof window !== 'undefined' && window.innerWidth < 768 ? Math.min(window.innerWidth - 32, 600) : undefined} 
-                    />
+                 <Document file={selectedPaper.pdfUrl} onLoadSuccess={({ numPages }) => setNumPages(numPages)} loading={<div className="flex items-center gap-2 font-bold bg-white p-3 md:p-4 border-3 md:border-4 border-black shadow-nb text-sm"><Loader2 className="animate-spin"/> Loading PDF...</div>}>
+                    <Page pageNumber={pageNumber} scale={scale} renderTextLayer={true} renderAnnotationLayer={true} className="shadow-nb-lg" width={typeof window !== 'undefined' && window.innerWidth < 768 ? Math.min(window.innerWidth - 32, 600) : undefined} />
                  </Document>
               </div>
            </div>
