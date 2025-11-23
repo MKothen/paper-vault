@@ -4,13 +4,15 @@ import { Document, Page } from 'react-pdf';
 import type { Paper, Highlight, PostIt } from '../types';
 import { 
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Highlighter, StickyNote, 
-  X, Book, List, Search, Download, FileText 
+  X, Book, List, Search, Download, FileText, Wand2, Network 
 } from 'lucide-react';
 import { TableOfContents } from './TableOfContents';
 import { FullTextSearch } from './FullTextSearch';
 import { AnnotationsSidebar } from './AnnotationsSidebar';
 import { HighlightLayer } from './HighlightLayer';
 import { PostItLayer } from './PostItLayer';
+import { AISummary } from './AISummary';
+import { RelatedWorkFinder } from './RelatedWorkFinder';
 import { extractPDFText, extractPDFOutline } from '../utils/pdfUtils';
 import {
   createHighlightFromSelection,
@@ -27,12 +29,13 @@ interface Props {
   onClose: () => void;
   onUpdate: (data: Partial<Paper>) => void;
   papers: Paper[];
+  onImportPaper?: (paperData: any) => void;
 }
 
 type Mode = 'read' | 'highlight' | 'note';
-type SidebarTab = 'toc' | 'notes' | 'annotations';
+type SidebarTab = 'toc' | 'notes' | 'annotations' | 'ai' | 'related';
 
-export function EnhancedReader({ paper, onClose, onUpdate, papers }: Props) {
+export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper }: Props) {
   // PDF state
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
@@ -388,12 +391,32 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers }: Props) {
               }`}
             >
               <Highlighter size={14} className="inline mr-1" />
-              Annotations
+              Marks
               {(highlights.length > 0 || postits.length > 0) && (
                 <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
                   {highlights.length + postits.length}
                 </span>
               )}
+            </button>
+            
+            <button 
+              onClick={() => setSidebarTab('ai')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
+                sidebarTab === 'ai' ? 'bg-nb-purple' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Wand2 size={14} className="inline mr-1" />
+              AI
+            </button>
+            
+            <button 
+              onClick={() => setSidebarTab('related')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
+                sidebarTab === 'related' ? 'bg-nb-lime' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Network size={14} className="inline mr-1" />
+              Related
             </button>
           </div>
 
@@ -453,6 +476,21 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers }: Props) {
                 onPostItDelete={handlePostItDelete}
                 paperTitle={paper.title}
               />
+            )}
+            
+            {sidebarTab === 'ai' && (
+              <div className="h-full overflow-y-auto p-4">
+                <AISummary paper={paper} />
+              </div>
+            )}
+            
+            {sidebarTab === 'related' && (
+              <div className="h-full overflow-y-auto">
+                <RelatedWorkFinder 
+                  currentPaper={paper}
+                  onImport={onImportPaper || (() => {})}
+                />
+              </div>
             )}
           </div>
         </div>
