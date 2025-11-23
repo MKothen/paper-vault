@@ -1,0 +1,22 @@
+{
+  "short_name": "PaperVault",
+  "name": "Paper Vault Research App",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#FFD90F",
+  "theme_color": "#FFD90F",
+  "description": "Organize, read, and review research papers on any device. Offline ready.",
+  "orientation": "portrait-primary"
+}
