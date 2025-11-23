@@ -9,7 +9,7 @@ import {
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
   Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
-  Info, LayoutGrid, BarChart3, Download, FileText, Users
+  Info, LayoutGrid, BarChart3, Download, FileText, Users, ChevronRight
 } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 
@@ -240,7 +240,7 @@ function App() {
       const metadata = await extractMetadata(file);
       if (typeof findDuplicatePapers === 'function') {
         const duplicates = findDuplicatePapers(metadata, papers);
-        if (duplicates.length > 0) addToast(`\u26a0\ufe0f Possible duplicate: "${duplicates[0].title}"`, "warning");
+        if (duplicates.length > 0) addToast(`⚠️ Possible duplicate: "${duplicates[0].title}"`, "warning");
       }
       const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
       await uploadBytes(fileRef, file);
@@ -407,7 +407,7 @@ function App() {
             </div>
             <div className="nb-card p-6 bg-nb-cyan">
               <div className="text-4xl font-black mb-2">{readingStats.currentStreak}</div>
-              <div className="text-sm font-bold uppercase">Day Streak \ud83d\udd25</div>
+              <div className="text-sm font-bold uppercase">Day Streak 🔥</div>
             </div>
             <div className="nb-card p-6 bg-nb-pink">
               <div className="text-4xl font-black mb-2">{formatReadingTime ? formatReadingTime(readingStats.totalReadingTime) : readingStats.totalReadingTime}</div>
@@ -437,12 +437,61 @@ function App() {
             <h2 className="font-black text-xl uppercase truncate max-w-md tracking-tight text-black">{selectedPaper.title}</h2>
           </div>
           <div className="flex items-center gap-3">
+            {/* Page Navigation Controls */}
+            <div className="flex items-center border-2 border-black bg-white text-black shadow-nb-sm">
+              <button 
+                onClick={() => setPageNumber(p => Math.max(1, p - 1))} 
+                disabled={pageNumber <= 1}
+                className="p-2 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed border-r-2 border-black"
+              >
+                <ChevronLeft size={20} strokeWidth={3} />
+              </button>
+              <span className="px-3 font-bold font-mono">
+                {pageNumber} / {numPages || '?'}
+              </span>
+              <button 
+                onClick={() => setPageNumber(p => Math.min(numPages || p, p + 1))} 
+                disabled={pageNumber >= (numPages || 1)}
+                className="p-2 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed border-l-2 border-black"
+              >
+                <ChevronRight size={20} strokeWidth={3} />
+              </button>
+            </div>
+            
+            {/* Zoom Controls */}
+            <div className="flex items-center border-2 border-black bg-white text-black shadow-nb-sm">
+              <button 
+                onClick={() => setScale(s => Math.max(0.5, s - 0.1))} 
+                className="p-2 hover:bg-gray-100 border-r-2 border-black"
+              >
+                <ZoomOut size={20} strokeWidth={3} />
+              </button>
+              <span className="px-3 font-bold font-mono text-sm">
+                {Math.round(scale * 100)}%
+              </span>
+              <button 
+                onClick={() => setScale(s => Math.min(3, s + 0.1))} 
+                className="p-2 hover:bg-gray-100 border-l-2 border-black"
+              >
+                <ZoomIn size={20} strokeWidth={3} />
+              </button>
+            </div>
+            
             <button onClick={() => setDarkMode(!darkMode)} className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm">{darkMode ? <Sun strokeWidth={3}/> : <Moon strokeWidth={3}/>}</button>
+            
             <div className="flex items-center border-2 border-black px-2 py-1 gap-2 bg-white text-black shadow-nb-sm">
               <Timer size={16} strokeWidth={3} />
               <span className="font-mono font-bold">{Math.floor(pomodoroTime/60)}:{(pomodoroTime%60).toString().padStart(2,'0')}</span>
               <button onClick={() => setPomodoroRunning(!pomodoroRunning)} className={`px-2 text-xs font-bold border-2 border-black ${pomodoroRunning ? 'bg-nb-orange' : 'bg-nb-lime'}`}>{pomodoroRunning ? 'STOP' : 'GO'}</button>
             </div>
+            
+            {/* Sidebar Toggle */}
+            <button 
+              onClick={() => setShowSidebar(!showSidebar)} 
+              className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm"
+            >
+              <LayoutGrid size={20} strokeWidth={3} />
+            </button>
           </div>
         </div>
 
