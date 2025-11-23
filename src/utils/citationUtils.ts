@@ -1,6 +1,44 @@
 import type { Paper, CitationData, BibTeXEntry } from '../types';
 
 /**
+ * Normalize DOI input to clean format
+ * Handles formats like:
+ * - 10.1234/5678
+ * - https://doi.org/10.1234/5678
+ * - https://www.doi.org/10.1234/5678
+ * - doi.org/10.1234/5678
+ */
+export function normalizeDOI(input: string): string | null {
+  if (!input) return null;
+  
+  // Remove whitespace
+  const trimmed = input.trim();
+  
+  // Try to extract DOI from URL format
+  const urlPattern = /(?:https?:\/\/)?(?:www\.)?doi\.org\/(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i;
+  const urlMatch = trimmed.match(urlPattern);
+  if (urlMatch) {
+    return urlMatch[1];
+  }
+  
+  // Check if it's already a clean DOI
+  const doiPattern = /^(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)$/i;
+  const doiMatch = trimmed.match(doiPattern);
+  if (doiMatch) {
+    return doiMatch[1];
+  }
+  
+  // Try to extract DOI from text
+  const extractPattern = /\b(10[.][0-9]{4,}(?:[.][0-9]+)*\/(?:(?!["&\'<>])\S)+)\b/gi;
+  const extractMatch = trimmed.match(extractPattern);
+  if (extractMatch) {
+    return extractMatch[0];
+  }
+  
+  return null;
+}
+
+/**
  * Fetch citation count and related data from Semantic Scholar
  */
 export async function fetchSemanticScholarData(
@@ -24,8 +62,19 @@ export async function fetchSemanticScholarData(
       }
       return null;
     } else {
+      // Normalize DOI if needed
+      let cleanIdentifier = identifier;
+      if (identifierType === 'DOI') {
+        const normalized = normalizeDOI(identifier);
+        if (!normalized) {
+          console.error('Invalid DOI format:', identifier);
+          return null;
+        }
+        cleanIdentifier = normalized;
+      }
+      
       // Direct lookup
-      url = `https://api.semanticscholar.org/graph/v1/paper/${identifierType}:${identifier}?fields=${fields}`;
+      url = `https://api.semanticscholar.org/graph/v1/paper/${identifierType}:${cleanIdentifier}?fields=${fields}`;
     }
 
     const response = await fetch(url);
@@ -169,10 +218,7 @@ export function formatCitation(
  * Extract DOI from various text formats
  */
 export function extractDOI(text: string): string | null {
-  const doiPattern =
-    /\b(10[.][0-9]{4,}(?:[.][0-9]+)*\/(?:(?!["&\'<>])\S)+)\b/gi;
-  const match = text.match(doiPattern);
-  return match ? match[0] : null;
+  return normalizeDOI(text);
 }
 
 /**
