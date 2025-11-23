@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Wand2, Loader2, Award, Star, Plus } from 'lucide-react';
 import type { Paper } from '../types';
-import { fetchSemanticScholarData } from '../utils/citationUtils';
+import { fetchSemanticScholarData, normalizeDOI } from '../utils/citationUtils';
 
 interface EnhancedMetadataModalProps {
   paper: Paper;
@@ -54,7 +54,7 @@ export function EnhancedMetadataModal({
   const [isFetchingCitations, setIsFetchingCitations] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchCitations = async () => {
+  const fetchMetadataFromDOI = async () => {
     if (!formData.doi) {
       addToast("Please add a DOI first.", "error");
       return;
@@ -62,19 +62,51 @@ export function EnhancedMetadataModal({
 
     setIsFetchingCitations(true);
     try {
-      const data = await fetchSemanticScholarData(formData.doi, 'DOI');
+      // Normalize DOI to handle all formats
+      const cleanDoi = normalizeDOI(formData.doi);
+      
+      if (!cleanDoi) {
+        addToast("Invalid DOI format.", "error");
+        setIsFetchingCitations(false);
+        return;
+      }
+
+      const data = await fetchSemanticScholarData(cleanDoi, 'DOI');
       if (data) {
+        // Extract authors
+        let authorsString = "";
+        if (data.authors && Array.isArray(data.authors)) {
+          authorsString = data.authors.map((author: any) => author.name).join(", ");
+        }
+        
+        // Extract year
+        let yearString = "";
+        if (data.year) {
+          yearString = data.year.toString();
+        } else if (data.publicationDate) {
+          yearString = data.publicationDate.split('-')[0];
+        }
+
+        // Update all metadata fields
         setFormData({
           ...formData,
+          doi: cleanDoi,
+          title: data.title || formData.title,
+          authors: authorsString || formData.authors,
+          abstract: data.abstract || formData.abstract,
+          year: yearString || formData.year,
+          venue: data.venue || formData.venue,
           citationCount: data.citationCount || 0,
           semanticScholarId: data.paperId
         });
-        addToast(`${data.citationCount || 0} citations found!`, "success");
+        
+        addToast(`Metadata fetched! ${data.citationCount || 0} citations found.`, "success");
       } else {
-        addToast("Failed to fetch citations.", "error");
+        addToast("Failed to fetch metadata from DOI.", "error");
       }
     } catch (error) {
-      addToast("Error fetching citation data.", "error");
+      addToast("Error fetching metadata.", "error");
+      console.error('Error fetching DOI metadata:', error);
     }
     setIsFetchingCitations(false);
   };
@@ -105,6 +137,45 @@ export function EnhancedMetadataModal({
         </h2>
         
         <div className="space-y-4">
+          {/* DOI with Auto-Fill (moved to top for better UX) */}
+          <div className="bg-nb-purple/10 p-4 border-2 border-nb-purple">
+            <label className="font-bold block mb-2 text-sm uppercase">DOI - Auto-Fill All Fields</label>
+            <p className="text-xs text-gray-600 mb-2">
+              Paste any DOI format: 10.xxxx/xxxx | https://doi.org/10.xxxx/xxxx | https://www.doi.org/10.xxxx/xxxx
+            </p>
+            <div className="flex gap-2">
+              <input
+                className="nb-input flex-1"
+                value={formData.doi || ''}
+                onChange={e => setFormData({ ...formData, doi: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') fetchMetadataFromDOI(); }}
+                placeholder="Paste DOI here..."
+              />
+              <button
+                onClick={fetchMetadataFromDOI}
+                disabled={isFetchingCitations}
+                className="nb-button bg-nb-purple flex items-center gap-2"
+              >
+                {isFetchingCitations ? (
+                  <Loader2 className="animate-spin" size={16} />
+                ) : (
+                  <Wand2 size={16} />
+                )}
+                {isFetchingCitations ? 'Fetching...' : 'Auto-Fill'}
+              </button>
+            </div>
+          </div>
+
+          {/* Citation Count Display */}
+          {(formData.citationCount || 0) > 0 && (
+            <div className="bg-nb-lime p-4 border-2 border-black">
+              <p className="font-bold text-sm flex items-center gap-2">
+                <Award size={20} />
+                {formData.citationCount} citations on Semantic Scholar
+              </p>
+            </div>
+          )}
+          
           {/* Title */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Title *</label>
@@ -236,41 +307,6 @@ export function EnhancedMetadataModal({
               placeholder="One hypothesis per line...\nExample: Dopamine modulates learning rate"
             />
           </div>
-          
-          {/* DOI with Citation Fetch */}
-          <div>
-            <label className="font-bold block mb-2 text-sm uppercase">DOI</label>
-            <div className="flex gap-2">
-              <input
-                className="nb-input flex-1"
-                value={formData.doi || ''}
-                onChange={e => setFormData({ ...formData, doi: e.target.value })}
-                placeholder="10.xxxx/xxxxx"
-              />
-              <button
-                onClick={fetchCitations}
-                disabled={isFetchingCitations}
-                className="nb-button bg-nb-purple flex items-center gap-2"
-              >
-                {isFetchingCitations ? (
-                  <Loader2 className="animate-spin" size={16} />
-                ) : (
-                  <Wand2 size={16} />
-                )}
-                Fetch
-              </button>
-            </div>
-          </div>
-          
-          {/* Citation Count Display */}
-          {(formData.citationCount || 0) > 0 && (
-            <div className="bg-nb-lime p-4 border-2 border-black">
-              <p className="font-bold text-sm flex items-center gap-2">
-                <Award size={20} />
-                {formData.citationCount} citations on Semantic Scholar
-              </p>
-            </div>
-          )}
           
           {/* Link */}
           <div>
