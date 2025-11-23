@@ -5,8 +5,11 @@ const SEMANTIC_SCHOLAR_RECOMMENDATIONS_API = 'https://api.semanticscholar.org/re
 
 export async function fetchCitationData(doi: string): Promise<CitationData | null> {
   try {
+    // Clean up the DOI - remove any existing "DOI:" prefix to avoid duplication
     const cleanDoi = doi.replace(/^DOI:/i, '');
-    const response = await fetch(`${SEMANTIC_SCHOLAR_API}/paper/DOI:${cleanDoi}?fields=paperId,externalIds,title,citationCount,references,citations`);
+    const response = await fetch(
+      `${SEMANTIC_SCHOLAR_API}/paper/DOI:${cleanDoi}?fields=paperId,externalIds,title,citationCount,references,citations`
+    );
     if (!response.ok) return null;
     return await response.json();
   } catch (error) {
@@ -15,7 +18,11 @@ export async function fetchCitationData(doi: string): Promise<CitationData | nul
   }
 }
 
-// Fetch papers that cite the given paper (removed abstract to avoid 500 errors with high limits)
+/**
+ * Fetch papers that cite the given paper (removed abstract to avoid 500 errors with high limits)
+ * @param paperId - The Semantic Scholar paper ID
+ * @param limit - Number of citations to return (max ~100-200 with full fields)
+ */
 export async function fetchCitationsWithMetadata(paperId: string, limit: number = 100) {
   try {
     // Removed abstract field - causes 500 errors when combined with high limit
@@ -41,15 +48,17 @@ export async function fetchCitationsWithMetadata(paperId: string, limit: number 
   }
 }
 
+/**
+ * Get recommended papers using Semantic Scholar's Recommendations API
+ * @param paperId - The Semantic Scholar paper ID to get recommendations for
+ * @param limit - Number of recommendations to return (max 500)
+ */
 export async function fetchRecommendedPapers(
   paperId: string, 
-  limit: number = 100 // Recommendations API supports up to 500
+  limit: number = 500
 ) {
   try {
-    // The recommendations API only accepts 'fields' and 'limit' parameters
-    // Valid fields: paperId, externalIds, url, title, abstract, venue, year, 
-    //               referenceCount, citationCount, influentialCitationCount,
-    //               isOpenAccess, fieldsOfStudy, authors
+    // Reduced fields for better performance - max limit is 500
     const fields = 'paperId,title,authors,year,venue,citationCount';
     const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers/forpaper/${paperId}?fields=${fields}&limit=${limit}`;
     
@@ -67,10 +76,16 @@ export async function fetchRecommendedPapers(
   }
 }
 
+/**
+ * Get recommended papers using multiple positive and/or negative example papers
+ * @param positivePaperIds - Array of Semantic Scholar paper IDs for positive examples
+ * @param negativePaperIds - Array of Semantic Scholar paper IDs for negative examples (optional)
+ * @param limit - Number of recommendations to return (max 500)
+ */
 export async function fetchRecommendedPapersMultiple(
   positivePaperIds: string[],
   negativePaperIds: string[] = [],
-  limit: number = 100 // Max is 500 for recommendations API
+  limit: number = 500
 ) {
   try {
     const fields = 'paperId,title,authors,year,venue,citationCount';
