@@ -199,15 +199,38 @@ function App() {
           try {
               const citationData = await fetchSemanticScholarData(cleanDoi, 'DOI');
               if (citationData && !citationData.error) {
+                  // Extract authors from the API response
+                  let authorsString = "";
+                  if (citationData.authors && Array.isArray(citationData.authors)) {
+                      authorsString = citationData.authors.map(author => author.name).join(", ");
+                  }
+                  
+                  // Extract year from the API response (could be in 'year' or 'publicationDate')
+                  let yearString = "";
+                  if (citationData.year) {
+                      yearString = citationData.year.toString();
+                  } else if (citationData.publicationDate) {
+                      // Extract year from publicationDate (format: YYYY-MM-DD)
+                      yearString = citationData.publicationDate.split('-')[0];
+                  }
+                  
                   return {
-                      title: citationData.title,
-                      tags: generateSmartTags(citationData.title),
-                      authors: "", abstract: "", year: new Date().getFullYear().toString(), venue: "",
-                      doi: cleanDoi, citationCount: citationData.citationCount || 0,
-                      semanticScholarId: citationData.paperId, pdfHash, source: 'doi'
+                      title: citationData.title || titleCandidate,
+                      tags: generateSmartTags(citationData.title + " " + (citationData.abstract || "")),
+                      authors: authorsString,
+                      abstract: citationData.abstract || "",
+                      year: yearString || new Date().getFullYear().toString(),
+                      venue: citationData.venue || "",
+                      doi: cleanDoi,
+                      citationCount: citationData.citationCount || 0,
+                      semanticScholarId: citationData.paperId,
+                      pdfHash,
+                      source: 'doi'
                   };
               }
-          } catch (e) {}
+          } catch (e) {
+              console.error('Error fetching Semantic Scholar data:', e);
+          }
       }
       if (titleCandidate.length < 5) titleCandidate = file.name.replace('.pdf', '');
       return { title: titleCandidate, tags: generateSmartTags(fullText), authors: authorCandidate, abstract: "", year: new Date().getFullYear().toString(), venue: "", pdfHash, source: 'local' };
