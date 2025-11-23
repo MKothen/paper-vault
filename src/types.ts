@@ -31,6 +31,12 @@ export interface Paper {
   thumbnailUrl?: string; // Cached first page
   structuredNotes?: StructuredNotes;
   
+  // Spaced Repetition System fields
+  srsRepetitions?: number; // Number of successful reviews in a row
+  srsInterval?: number; // Current interval in days
+  srsEase?: number; // Ease factor (difficulty multiplier)
+  srsDue?: number; // Next review date (ms since epoch)
+  
   // New detailed metadata fields
   journal?: string;
   volume?: string;
@@ -67,19 +73,19 @@ export interface StructuredNotes {
 }
 
 export interface Highlight {
-  id: number;
+  id: string;
   page: number;
   rects: Array<{ x: number; y: number; width: number; height: number }>;
   color: string;
   text: string;
-  category?: 'methodology' | 'results' | 'related-work' | 'discussion' | 'limitation' | 'general';
+  category: 'methodology' | 'results' | 'related-work' | 'discussion' | 'limitation' | 'general';
   linkedPapers?: string[]; // Paper IDs
   note?: string;
   createdAt?: number;
 }
 
 export interface PostIt {
-  id: number;
+  id: string;
   page: number;
   x: number;
   y: number;
