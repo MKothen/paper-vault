@@ -9,7 +9,7 @@ import {
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
   Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
-  Info, LayoutGrid, BarChart3, Download, FileText
+  Info, LayoutGrid, BarChart3, Download, FileText, Users
 } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 
@@ -240,7 +240,7 @@ function App() {
       const metadata = await extractMetadata(file);
       if (typeof findDuplicatePapers === 'function') {
         const duplicates = findDuplicatePapers(metadata, papers);
-        if (duplicates.length > 0) addToast(`⚠️ Possible duplicate: "${duplicates[0].title}"`, "warning");
+        if (duplicates.length > 0) addToast(`\u26a0\ufe0f Possible duplicate: "${duplicates[0].title}"`, "warning");
       }
       const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
       await uploadBytes(fileRef, file);
@@ -303,8 +303,24 @@ function App() {
 
   const filteredPapers = papers.filter(p => {
     const q = searchTerm.toLowerCase();
-    return p.title.toLowerCase().includes(q) || p.tags?.some(t => t.toLowerCase().includes(q));
+    return p.title.toLowerCase().includes(q) || 
+           p.tags?.some(t => t.toLowerCase().includes(q)) ||
+           p.authors?.toLowerCase().includes(q);
   });
+
+  // Handler for clicking on tags - navigates back to library with filter
+  const handleTagClick = (tag) => {
+    setSearchTerm(tag);
+    setActiveView('library');
+    addToast(`Filtering by tag: ${tag}`, "info");
+  };
+
+  // Handler for clicking on authors - navigates back to library with filter
+  const handleAuthorClick = (authorName) => {
+    setSearchTerm(authorName);
+    setActiveView('library');
+    addToast(`Filtering by author: ${authorName}`, "info");
+  };
 
   const SharedUI = () => (
     <>
@@ -391,7 +407,7 @@ function App() {
             </div>
             <div className="nb-card p-6 bg-nb-cyan">
               <div className="text-4xl font-black mb-2">{readingStats.currentStreak}</div>
-              <div className="text-sm font-bold uppercase">Day Streak 🔥</div>
+              <div className="text-sm font-bold uppercase">Day Streak \ud83d\udd25</div>
             </div>
             <div className="nb-card p-6 bg-nb-pink">
               <div className="text-4xl font-black mb-2">{formatReadingTime ? formatReadingTime(readingStats.totalReadingTime) : readingStats.totalReadingTime}</div>
@@ -400,11 +416,11 @@ function App() {
           </div>
           
           <div className="h-96">
-             <TagCloud papers={papers} onTagClick={(tag) => setSearchTerm(tag)} />
+             <TagCloud papers={papers} onTagClick={handleTagClick} />
           </div>
           
           <div className="h-96">
-             <AuthorNetwork papers={papers} />
+             <AuthorNetwork papers={papers} onAuthorClick={handleAuthorClick} />
           </div>
         </div>
       </div>
