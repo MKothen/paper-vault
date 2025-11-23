@@ -14,7 +14,7 @@ import {
 import ForceGraph2D from 'react-force-graph-2d';
 
 // --- REACT-PDF IMPORTS ---
-import { pdfjs, Document, Page } from 'react-pdf';
+import { pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -31,6 +31,7 @@ import { TagCloud } from './components/TagCloud';
 import { AISummary } from './components/AISummary';
 import { TOCSidebar } from './components/TOCSidebar';
 import { EnhancedMetadataModal } from './components/EnhancedMetadataModal';
+import { EnhancedReader } from './components/EnhancedReader';
 
 // Configure Worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -44,13 +45,6 @@ const COLORS = [
   { name: 'Lime', class: 'bg-nb-lime', hex: '#a3e635' },
   { name: 'Purple', class: 'bg-nb-purple', hex: '#c084fc' },
   { name: 'Orange', class: 'bg-nb-orange', hex: '#fb923c' },
-];
-
-const HIGHLIGHT_COLORS = [
-  { name: 'Yellow', hex: '#FFD90F', alpha: 'rgba(255, 217, 15, 0.4)' },
-  { name: 'Green', hex: '#a3e635', alpha: 'rgba(163, 230, 53, 0.4)' },
-  { name: 'Blue', hex: '#22d3ee', alpha: 'rgba(34, 211, 238, 0.4)' },
-  { name: 'Pink', hex: '#FF90E8', alpha: 'rgba(255, 144, 232, 0.4)' },
 ];
 
 // Smart Tag Generator
@@ -96,21 +90,6 @@ function App() {
   // BibTeX Import State
   const [bibtexInput, setBibtexInput] = useState("");
   const [showBibtexModal, setShowBibtexModal] = useState(false);
-
-  // Reader State
-  const [numPages, setNumPages] = useState(null);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [scale, setScale] = useState(1.2);
-  const [highlights, setHighlights] = useState([]);
-  const [postits, setPostits] = useState([]);
-  const [selectedColor, setSelectedColor] = useState(HIGHLIGHT_COLORS[0]);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState('toc');
-  const [darkMode, setDarkMode] = useState(false);
-  const [pomodoroTime, setPomodoroTime] = useState(25 * 60);
-  const [pomodoroRunning, setPomodoroRunning] = useState(false);
-  const [isHighlightMode, setIsHighlightMode] = useState(false);
-  const pomodoroRef = useRef(null);
   
   const graphRef = useRef();
   const [readingStats, setReadingStats] = useState(null);
@@ -142,27 +121,6 @@ function App() {
     });
     return () => unsubscribe();
   }, [user]);
-
-  useEffect(() => {
-    if (pomodoroRunning && pomodoroTime > 0) {
-      pomodoroRef.current = setInterval(() => setPomodoroTime(t => t - 1), 1000);
-    } else if (pomodoroTime === 0) {
-      setPomodoroRunning(false);
-      addToast("POMODORO COMPLETE!", "success");
-    }
-    return () => clearInterval(pomodoroRef.current);
-  }, [pomodoroRunning, pomodoroTime]);
-
-  useEffect(() => {
-    if (selectedPaper) {
-      const h = localStorage.getItem(`highlights-${selectedPaper.id}`);
-      const p = localStorage.getItem(`postits-${selectedPaper.id}`);
-      setHighlights(h ? JSON.parse(h) : []);
-      setPostits(p ? JSON.parse(p) : []);
-      setPageNumber(1);
-      setIsHighlightMode(false); 
-    }
-  }, [selectedPaper]);
 
   const extractMetadata = async (file) => {
       const arrayBuffer = await file.arrayBuffer();
@@ -253,7 +211,7 @@ function App() {
         status: "to-read", abstract: metadata.abstract, authors: metadata.authors, year: metadata.year, venue: metadata.venue,
         notes: "", pdfUrl: url, doi: metadata.doi || "", citationCount: metadata.citationCount || 0, pdfHash: metadata.pdfHash || "",
         thumbnailUrl: thumbnailUrl, createdAt: Date.now(), addedDate: Date.now(),
-        rating: 0, methods: [], organisms: [], hypotheses: []
+        rating: 0, methods: [], organisms: [], hypotheses: [], structuredNotes: {}
       });
   };
 
@@ -320,6 +278,15 @@ function App() {
     setSearchTerm(authorName);
     setActiveView('library');
     addToast(`Filtering by author: ${authorName}`, "info");
+  };
+
+  // Handler for updating paper data from EnhancedReader
+  const handlePaperUpdate = async (data) => {
+    if (!selectedPaper) return;
+    await updateDoc(doc(db, "papers", selectedPaper.id), {
+      ...data,
+      modifiedDate: Date.now()
+    });
   };
 
   const SharedUI = () => (
@@ -427,125 +394,18 @@ function App() {
     );
   }
 
+  // Use EnhancedReader for the reader view
   if (activeView === 'reader' && selectedPaper) {
     return (
-      <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900 text-white' : 'bg-nb-yellow'}`}>
+      <>
         <SharedUI />
-        <div className={`${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-black'} border-b-4 p-3 flex justify-between items-center z-20`}>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setActiveView('library')} className="nb-button flex gap-2 text-black"><ChevronLeft strokeWidth={3} /> Back</button>
-            <h2 className="font-black text-xl uppercase truncate max-w-md tracking-tight text-black">{selectedPaper.title}</h2>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Page Navigation Controls */}
-            <div className="flex items-center border-2 border-black bg-white text-black shadow-nb-sm">
-              <button 
-                onClick={() => setPageNumber(p => Math.max(1, p - 1))} 
-                disabled={pageNumber <= 1}
-                className="p-2 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed border-r-2 border-black"
-              >
-                <ChevronLeft size={20} strokeWidth={3} />
-              </button>
-              <span className="px-3 font-bold font-mono">
-                {pageNumber} / {numPages || '?'}
-              </span>
-              <button 
-                onClick={() => setPageNumber(p => Math.min(numPages || p, p + 1))} 
-                disabled={pageNumber >= (numPages || 1)}
-                className="p-2 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed border-l-2 border-black"
-              >
-                <ChevronRight size={20} strokeWidth={3} />
-              </button>
-            </div>
-            
-            {/* Zoom Controls */}
-            <div className="flex items-center border-2 border-black bg-white text-black shadow-nb-sm">
-              <button 
-                onClick={() => setScale(s => Math.max(0.5, s - 0.1))} 
-                className="p-2 hover:bg-gray-100 border-r-2 border-black"
-              >
-                <ZoomOut size={20} strokeWidth={3} />
-              </button>
-              <span className="px-3 font-bold font-mono text-sm">
-                {Math.round(scale * 100)}%
-              </span>
-              <button 
-                onClick={() => setScale(s => Math.min(3, s + 0.1))} 
-                className="p-2 hover:bg-gray-100 border-l-2 border-black"
-              >
-                <ZoomIn size={20} strokeWidth={3} />
-              </button>
-            </div>
-            
-            <button onClick={() => setDarkMode(!darkMode)} className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm">{darkMode ? <Sun strokeWidth={3}/> : <Moon strokeWidth={3}/>}</button>
-            
-            <div className="flex items-center border-2 border-black px-2 py-1 gap-2 bg-white text-black shadow-nb-sm">
-              <Timer size={16} strokeWidth={3} />
-              <span className="font-mono font-bold">{Math.floor(pomodoroTime/60)}:{(pomodoroTime%60).toString().padStart(2,'0')}</span>
-              <button onClick={() => setPomodoroRunning(!pomodoroRunning)} className={`px-2 text-xs font-bold border-2 border-black ${pomodoroRunning ? 'bg-nb-orange' : 'bg-nb-lime'}`}>{pomodoroRunning ? 'STOP' : 'GO'}</button>
-            </div>
-            
-            {/* Sidebar Toggle */}
-            <button 
-              onClick={() => setShowSidebar(!showSidebar)} 
-              className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm"
-            >
-              <LayoutGrid size={20} strokeWidth={3} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 flex overflow-hidden relative">
-           <div className={`flex-1 overflow-auto p-8 flex justify-center bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px] ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
-              <div className="relative h-fit pdf-page-container">
-                 <Document file={selectedPaper.pdfUrl} onLoadSuccess={({ numPages }) => setNumPages(numPages)} loading={<div className="flex items-center gap-2 font-bold bg-white p-4 border-4 border-black shadow-nb"><Loader2 className="animate-spin"/> Loading PDF...</div>}>
-                    <Page pageNumber={pageNumber} scale={scale} renderTextLayer={true} renderAnnotationLayer={true} className="shadow-nb-lg" />
-                 </Document>
-              </div>
-           </div>
-
-           {showSidebar && (
-             <div className={`w-80 border-l-4 border-black flex flex-col ${darkMode ? 'bg-gray-800 text-white' : 'bg-white'}`}>
-                <div className="flex border-b-4 border-black bg-gray-100">
-                  <button onClick={() => setSidebarTab('toc')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'toc' ? 'bg-nb-yellow text-black' : 'text-gray-500'}`}>Outline</button>
-                  <button onClick={() => setSidebarTab('ai')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'ai' ? 'bg-nb-purple text-black' : 'text-gray-500'}`}>AI</button>
-                  <button onClick={() => setSidebarTab('related')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'related' ? 'bg-nb-lime text-black' : 'text-gray-500'}`}>Related</button>
-                  <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-red-500 hover:text-white text-black"><X size={16}/></button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto">
-                   {sidebarTab === 'toc' && (
-                     <TOCSidebar pdfUrl={selectedPaper.pdfUrl} onNavigate={(page) => setPageNumber(page)} />
-                   )}
-                   
-                   {sidebarTab === 'ai' && (
-                     <div className="p-4">
-                       <AISummary paper={selectedPaper} />
-                     </div>
-                   )}
-                   
-                   {sidebarTab === 'related' && (
-                     <RelatedWorkFinder 
-                       currentPaper={selectedPaper} 
-                       onImport={async (newPaperData) => {
-                         await addDoc(collection(db, "papers"), {
-                           userId: user.uid,
-                           title: newPaperData.title,
-                           status: "to-read",
-                           color: COLORS[0].class,
-                           tags: [],
-                           ...newPaperData,
-                           createdAt: Date.now()
-                         });
-                         addToast("Paper added to To-Read", "success");
-                       }}
-                     />
-                   )}
-                </div>
-             </div>
-           )}
-        </div>
-      </div>
+        <EnhancedReader 
+          paper={selectedPaper} 
+          onClose={() => setActiveView('library')}
+          onUpdate={handlePaperUpdate}
+          papers={papers}
+        />
+      </>
     );
   }
 
