@@ -5,8 +5,17 @@ A powerful, serverless research paper management system designed for researchers
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)
 ![React](https://img.shields.io/badge/React-19.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Mobile](https://img.shields.io/badge/mobile-responsive-brightgreen)
 
 ## ✨ Core Features
+
+### 📱 Mobile-Responsive Design
+- **Fully Responsive:** Optimized layouts for phones, tablets, and desktops
+- **Touch-Friendly:** 44x44px minimum touch targets for all interactions
+- **Adaptive Kanban:** Vertical stacking on mobile, horizontal on desktop
+- **Mobile PDF Reader:** Full-screen overlay sidebar with touch gestures
+- **Responsive Typography:** Scales appropriately for readability on all screens
+- **No Horizontal Scroll:** Content fits perfectly on any viewport
 
 ### 📋 Organization & Management
 - **Kanban Board:** Visual organization by status (To Read, Reading, Done)
@@ -37,6 +46,7 @@ A powerful, serverless research paper management system designed for researchers
 - **Pomodoro Timer:** Built-in focus timer for reading sessions
 - **Dark Mode:** Eye-friendly reading in any lighting
 - **Zoom & Navigation:** Precise control with keyboard shortcuts
+- **Mobile-Optimized:** PDF scales automatically to fit mobile screens
 
 ### 📝 Note-Taking & Analysis
 - **Structured Notes Template:** Organized sections for:
@@ -98,12 +108,13 @@ A powerful, serverless research paper management system designed for researchers
 - **Offline Support:** PWA capabilities for offline access
 - **Dark Mode:** System-wide dark theme support
 - **Keyboard Shortcuts:** Power-user navigation
-- **Responsive Design:** Works on desktop, tablet, and mobile
+- **Fully Responsive:** ✨ Works seamlessly on desktop, tablet, and mobile
+- **Touch-Optimized:** All interactions meet mobile accessibility standards
 
 ### ☁️ Sync & Backup
 - **Cloud Sync:** Real-time Firebase synchronization
 - **Google Authentication:** Secure login with Google account
-- **Multi-Device:** Access from anywhere
+- **Multi-Device:** Access from anywhere (desktop, tablet, phone)
 - **Auto-Save:** Never lose your annotations or notes
 - **Export Library:** Download entire library as JSON
 
@@ -149,6 +160,18 @@ const firebaseConfig = {
   appId: "YOUR_APP_ID"
 };
 ```
+
+## 📱 Mobile Usage
+
+PaperVault is fully optimized for mobile devices:
+
+- **Library View:** Kanban columns stack vertically for easy scrolling
+- **PDF Reading:** Sidebar becomes a full-screen overlay accessible via menu button
+- **Touch Interactions:** All buttons are appropriately sized (44x44px minimum)
+- **Responsive Forms:** Metadata editing works seamlessly on small screens
+- **No Zooming Required:** All text is readable without pinch-to-zoom
+
+For detailed mobile implementation, see [MOBILE_RESPONSIVE_UPDATES.md](./MOBILE_RESPONSIVE_UPDATES.md)
 
 ## 📖 Usage Guide
 
@@ -200,7 +223,8 @@ paper-vault/
 ├── src/
 │   ├── components/          # React components
 │   │   ├── AnalyticsDashboard.tsx
-│   │   └── MultiFilterSidebar.tsx
+│   │   ├── VirtualKanbanBoard.tsx
+│   │   └── EnhancedMetadataModal.tsx
 │   ├── utils/              # Utility functions
 │   │   ├── semanticScholar.ts
 │   │   └── bibtex.ts
@@ -210,13 +234,14 @@ paper-vault/
 │   └── main.tsx            # Entry point
 ├── public/                 # Static assets
 ├── IMPLEMENTATION_GUIDE.md # Feature implementation guide
+├── MOBILE_RESPONSIVE_UPDATES.md # Mobile design documentation
 └── package.json
 ```
 
 ### Tech Stack
 
 - **Frontend:** React 19.2, TypeScript 5.9
-- **UI:** Tailwind CSS, Lucide Icons
+- **UI:** Tailwind CSS (with responsive breakpoints), Lucide Icons
 - **PDF:** React-PDF (PDF.js)
 - **Database:** Firebase Firestore
 - **Storage:** Firebase Storage
@@ -235,14 +260,17 @@ See [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md) for detailed instructio
 - Creating custom filters
 - Implementing new views
 
+For mobile-responsive development, see [MOBILE_RESPONSIVE_UPDATES.md](./MOBILE_RESPONSIVE_UPDATES.md)
+
 ## 🎨 Design System
 
 PaperVault uses a vibrant neobrutalist design:
 - **Colors:** Yellow, Cyan, Pink, Lime, Purple, Orange
-- **Borders:** Bold 4px black borders
+- **Borders:** Bold 3-4px black borders
 - **Shadows:** Offset box shadows
 - **Typography:** Space Grotesk, bold weights
 - **Interactive:** Hover translations, strong feedback
+- **Responsive:** Adaptive sizing across all devices
 
 ## 🤝 Contributing
 
@@ -250,7 +278,8 @@ Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Submit a pull request
+4. Test on multiple screen sizes (mobile, tablet, desktop)
+5. Submit a pull request
 
 ## 📝 License
 
@@ -262,6 +291,7 @@ MIT License - feel free to use for your research!
 - **PDF.js:** PDF rendering engine
 - **Firebase:** Backend infrastructure
 - **React Community:** Amazing ecosystem
+- **Tailwind CSS:** Responsive design utilities
 
 ## 🐛 Known Issues & Roadmap
 
@@ -274,11 +304,13 @@ MIT License - feel free to use for your research!
 - [ ] AI-powered paper summarization
 - [ ] Collaborative annotations
 - [ ] Zotero bidirectional sync
-- [ ] Mobile app (React Native)
+- [ ] Native mobile app (React Native)
 - [ ] Browser extension for quick saves
 - [ ] Export to Notion/Obsidian
 - [ ] Custom metadata fields
 - [ ] Paper recommendations ML
+- [ ] Gesture controls for mobile (swipe, pinch-to-zoom)
+- [ ] PWA install prompt
 
 ## 📧 Contact
 
@@ -286,4 +318,5 @@ For questions or suggestions, open an issue on GitHub!
 
 ---
 
-**Made with ☕ for researchers by researchers**
+**Made with ☕ for researchers by researchers**  
+**📱 Now fully mobile-responsive!**
