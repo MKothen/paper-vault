@@ -9,7 +9,8 @@ import {
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
   Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
-  Info, LayoutGrid, BarChart3, Download, FileText, Users, ChevronRight
+  Info, LayoutGrid, BarChart3, Download, FileText, Users, ChevronRight,
+  Brain, RefreshCw
 } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 
@@ -22,6 +23,7 @@ import 'react-pdf/dist/Page/TextLayer.css';
 import { generatePDFThumbnail, extractPDFText, findDuplicatePapers, calculatePDFHash } from './utils/pdfUtils';
 import { fetchSemanticScholarData, parseBibTeX, generateBibTeX, formatCitation } from './utils/citationUtils';
 import { calculateReadingStats, formatReadingTime, getTopItems } from './utils/analyticsUtils';
+import { sm2Review, initializeSRS, getDuePapers } from './utils/srs';
 
 // --- COMPONENT IMPORTS ---
 import { VirtualKanbanBoard } from './components/VirtualKanbanBoard';
@@ -32,6 +34,7 @@ import { AISummary } from './components/AISummary';
 import { TOCSidebar } from './components/TOCSidebar';
 import { EnhancedMetadataModal } from './components/EnhancedMetadataModal';
 import { EnhancedReader } from './components/EnhancedReader';
+import { ReviewQueue } from './components/ReviewQueue';
 
 // Configure Worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -121,6 +124,9 @@ function App() {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // Calculate due papers for review
+  const duePapers = useMemo(() => getDuePapers(papers), [papers]);
 
   const extractMetadata = async (file) => {
       const arrayBuffer = await file.arrayBuffer();
@@ -251,6 +257,43 @@ function App() {
 
   const handleStatusChange = async (id, newStatus) => {
     await updateDoc(doc(db, "papers", id), { status: newStatus });
+    
+    // Initialize SRS when paper moves to "read" status
+    if (newStatus === 'read') {
+      const paper = papers.find(p => p.id === id);
+      if (paper && !paper.srsDue) {
+        const srsState = initializeSRS();
+        await updateDoc(doc(db, "papers", id), {
+          srsRepetitions: srsState.repetitions,
+          srsInterval: srsState.interval,
+          srsEase: srsState.ease,
+          srsDue: srsState.due,
+        });
+        addToast("Paper added to review queue!", "success");
+      }
+    }
+  };
+
+  // Handler for reviewing a paper
+  const handleReview = async (paper, quality) => {
+    const prev = {
+      repetitions: paper.srsRepetitions ?? 0,
+      interval: paper.srsInterval ?? 0,
+      ease: paper.srsEase ?? 2.5,
+      due: paper.srsDue ?? Date.now(),
+    };
+
+    const next = sm2Review(prev, quality);
+
+    await updateDoc(doc(db, "papers", paper.id), {
+      srsRepetitions: next.repetitions,
+      srsInterval: next.interval,
+      srsEase: next.ease,
+      srsDue: next.due,
+      modifiedDate: Date.now()
+    });
+
+    addToast("Review recorded!", "success");
   };
 
   const allUniqueTags = useMemo(() => {
@@ -411,6 +454,24 @@ function App() {
     );
   }
 
+  // Review Queue view
+  if (activeView === 'review') {
+    return (
+      <>
+        <SharedUI />
+        <ReviewQueue
+          duePapers={duePapers}
+          onReview={handleReview}
+          onOpenPaper={(paper) => {
+            setSelectedPaper(paper);
+            setActiveView('reader');
+          }}
+          onBack={() => setActiveView('library')}
+        />
+      </>
+    );
+  }
+
   // Use EnhancedReader for the reader view
   if (activeView === 'reader' && selectedPaper) {
     return (
@@ -433,6 +494,17 @@ function App() {
       <header className="bg-white border-b-4 border-black p-5 flex justify-between items-center shadow-sm sticky top-0 z-30">
         <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1></div>
         <div className="flex gap-4">
+          <button 
+            onClick={() => setActiveView('review')} 
+            className="nb-button flex gap-2 relative"
+          >
+            <Brain strokeWidth={3} /> Review
+            {duePapers.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-black rounded-full w-6 h-6 flex items-center justify-center border-2 border-black">
+                {duePapers.length}
+              </span>
+            )}
+          </button>
           <button onClick={() => setActiveView('analytics')} className="nb-button flex gap-2"><BarChart3 strokeWidth={3} /> Analytics</button>
           <button onClick={logout} className="nb-button flex gap-2"><LogOut strokeWidth={3} /> Exit</button>
         </div>
