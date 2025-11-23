@@ -1,6 +1,6 @@
 // src/components/AnnotationsSidebar.tsx
 import React, { useState } from 'react';
-import { Highlight, PostIt } from '../types';
+import type { Highlight, PostIt } from '../types';
 import { 
   Trash2, Edit2, Save, X, Download, Filter, Search,
   ChevronDown, ChevronRight, FileText, StickyNote 

@@ -1,6 +1,6 @@
 // src/components/PostItLayer.tsx
 import React, { useState } from 'react';
-import { PostIt } from '../types';
+import type { PostIt } from '../types';
 import { X, GripVertical } from 'lucide-react';
 import { getPostItColors } from '../utils/highlightUtils';
 

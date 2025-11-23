@@ -1,6 +1,6 @@
 // src/components/HighlightLayer.tsx
 import React from 'react';
-import { Highlight } from '../types';
+import type { Highlight } from '../types';
 
 interface Props {
   highlights: Highlight[];

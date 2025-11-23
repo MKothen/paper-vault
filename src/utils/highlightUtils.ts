@@ -1,5 +1,5 @@
 // src/utils/highlightUtils.ts
-import { Highlight, PostIt } from '../types';
+import type { Highlight, PostIt } from '../types';
 
 /**
  * Normalizes selection rectangles relative to container

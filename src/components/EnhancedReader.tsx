@@ -1,7 +1,7 @@
 // src/components/EnhancedReader.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Document, Page } from 'react-pdf';
-import { Paper, Highlight, PostIt } from '../types';
+import type { Paper, Highlight, PostIt } from '../types';
 import { 
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Highlighter, StickyNote, 
   X, Book, List, Search, Download, FileText 
