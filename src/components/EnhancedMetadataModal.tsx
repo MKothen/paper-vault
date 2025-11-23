@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Wand2, Loader2, Award, Star, Plus } from 'lucide-react';
 import type { Paper } from '../types';
-import { fetchCitationData } from '../utils/citationUtils';
+import { fetchSemanticScholarData } from '../utils/citationUtils';
 
 interface EnhancedMetadataModalProps {
   paper: Paper;
@@ -62,7 +62,7 @@ export function EnhancedMetadataModal({
 
     setIsFetchingCitations(true);
     try {
-      const data = await fetchCitationData(formData.doi);
+      const data = await fetchSemanticScholarData(formData.doi, 'DOI');
       if (data) {
         setFormData({
           ...formData,
