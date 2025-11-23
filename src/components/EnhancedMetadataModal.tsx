@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Wand2, Loader2, Award, Star, Plus } from 'lucide-react';
 import type { Paper } from '../types';
 import { fetchSemanticScholarData, normalizeDOI } from '../utils/citationUtils';
@@ -55,7 +55,9 @@ export function EnhancedMetadataModal({
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchMetadataFromDOI = async () => {
-    if (!formData.doi) {
+    const currentDoi = formData.doi?.trim();
+    
+    if (!currentDoi) {
       addToast("Please add a DOI first.", "error");
       return;
     }
@@ -63,61 +65,74 @@ export function EnhancedMetadataModal({
     setIsFetchingCitations(true);
     try {
       // Normalize DOI to handle all formats
-      const cleanDoi = normalizeDOI(formData.doi);
+      const cleanDoi = normalizeDOI(currentDoi);
       
       if (!cleanDoi) {
-        addToast("Invalid DOI format.", "error");
+        addToast("Invalid DOI format. Try: 10.xxxx/xxxx or https://doi.org/10.xxxx/xxxx", "error");
         setIsFetchingCitations(false);
         return;
       }
 
+      console.log('Fetching metadata for normalized DOI:', cleanDoi);
       const data = await fetchSemanticScholarData(cleanDoi, 'DOI');
+      
       if (data) {
+        console.log('Received data from Semantic Scholar:', data);
+        
         // Extract authors
-        let authorsString = "";
-        if (data.authors && Array.isArray(data.authors)) {
+        let authorsString = formData.authors || "";
+        if (data.authors && Array.isArray(data.authors) && data.authors.length > 0) {
           authorsString = data.authors.map((author: any) => author.name).join(", ");
         }
         
         // Extract year
-        let yearString = "";
+        let yearString = formData.year || "";
         if (data.year) {
           yearString = data.year.toString();
         } else if (data.publicationDate) {
           yearString = data.publicationDate.split('-')[0];
         }
 
-        // Update all metadata fields
-        setFormData({
+        // Create updated form data with all fetched metadata
+        const updatedData = {
           ...formData,
-          doi: cleanDoi,
+          doi: cleanDoi, // Always use the normalized DOI
           title: data.title || formData.title,
-          authors: authorsString || formData.authors,
+          authors: authorsString,
           abstract: data.abstract || formData.abstract,
-          year: yearString || formData.year,
+          year: yearString,
           venue: data.venue || formData.venue,
           citationCount: data.citationCount || 0,
-          semanticScholarId: data.paperId
-        });
+          semanticScholarId: data.paperId || formData.semanticScholarId
+        };
         
-        addToast(`Metadata fetched! ${data.citationCount || 0} citations found.`, "success");
+        console.log('Updating form data with:', updatedData);
+        setFormData(updatedData);
+        
+        addToast(`✓ Metadata fetched! ${data.citationCount || 0} citations found.`, "success");
       } else {
-        addToast("Failed to fetch metadata from DOI.", "error");
+        addToast("DOI not found in Semantic Scholar database.", "error");
       }
     } catch (error) {
-      addToast("Error fetching metadata.", "error");
+      addToast("Error fetching metadata. Please check your connection.", "error");
       console.error('Error fetching DOI metadata:', error);
     }
     setIsFetchingCitations(false);
   };
 
   const handleSave = async () => {
+    if (!formData.title?.trim()) {
+      addToast("Title is required!", "error");
+      return;
+    }
+
     setIsSaving(true);
     try {
       await onSave(formData);
       onClose();
     } catch (error) {
       addToast("Failed to save changes.", "error");
+      console.error('Save error:', error);
     }
     setIsSaving(false);
   };
@@ -139,36 +154,44 @@ export function EnhancedMetadataModal({
         <div className="space-y-4">
           {/* DOI with Auto-Fill (moved to top for better UX) */}
           <div className="bg-nb-purple/10 p-4 border-2 border-nb-purple">
-            <label className="font-bold block mb-2 text-sm uppercase">DOI - Auto-Fill All Fields</label>
+            <label className="font-bold block mb-2 text-sm uppercase flex items-center gap-2">
+              <Wand2 size={16} /> DOI - Auto-Fill All Fields
+            </label>
             <p className="text-xs text-gray-600 mb-2">
-              Paste any DOI format: 10.xxxx/xxxx | https://doi.org/10.xxxx/xxxx | https://www.doi.org/10.xxxx/xxxx
+              Paste any DOI format: <code className="bg-gray-200 px-1">10.xxxx/xxxx</code> | <code className="bg-gray-200 px-1">https://doi.org/10.xxxx/xxxx</code> | <code className="bg-gray-200 px-1">https://www.doi.org/10.xxxx/xxxx</code>
             </p>
             <div className="flex gap-2">
               <input
                 className="nb-input flex-1"
                 value={formData.doi || ''}
                 onChange={e => setFormData({ ...formData, doi: e.target.value })}
-                onKeyDown={e => { if (e.key === 'Enter') fetchMetadataFromDOI(); }}
+                onKeyDown={e => { if (e.key === 'Enter' && !isFetchingCitations) fetchMetadataFromDOI(); }}
                 placeholder="Paste DOI here..."
+                disabled={isFetchingCitations}
               />
               <button
                 onClick={fetchMetadataFromDOI}
-                disabled={isFetchingCitations}
-                className="nb-button bg-nb-purple flex items-center gap-2"
+                disabled={isFetchingCitations || !formData.doi?.trim()}
+                className="nb-button bg-nb-purple flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isFetchingCitations ? (
-                  <Loader2 className="animate-spin" size={16} />
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    Fetching...
+                  </>
                 ) : (
-                  <Wand2 size={16} />
+                  <>
+                    <Wand2 size={16} />
+                    Auto-Fill
+                  </>
                 )}
-                {isFetchingCitations ? 'Fetching...' : 'Auto-Fill'}
               </button>
             </div>
           </div>
 
           {/* Citation Count Display */}
           {(formData.citationCount || 0) > 0 && (
-            <div className="bg-nb-lime p-4 border-2 border-black">
+            <div className="bg-nb-lime p-4 border-2 border-black animate-in fade-in">
               <p className="font-bold text-sm flex items-center gap-2">
                 <Award size={20} />
                 {formData.citationCount} citations on Semantic Scholar
@@ -206,7 +229,7 @@ export function EnhancedMetadataModal({
                 className="nb-input w-full"
                 value={formData.year || ''}
                 onChange={e => setFormData({ ...formData, year: e.target.value })}
-                placeholder="2024"
+                placeholder="2025"
               />
             </div>
             <div>
