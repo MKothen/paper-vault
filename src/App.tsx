@@ -53,15 +53,21 @@ const HIGHLIGHT_COLORS = [
   { name: 'Pink', hex: '#FF90E8', alpha: 'rgba(255, 144, 232, 0.4)' },
 ];
 
-const IS_DESKTOP = typeof window !== 'undefined' && window.innerWidth >= 768;
-
+// Smart Tag Generator
 const generateSmartTags = (text) => {
   if (!text) return [];
   const stopWords = new Set(["the", "and", "of", "for", "with", "analysis", "study", "using", "based", "from", "that", "this", "introduction", "conclusion", "results", "method", "paper", "proposed", "http", "https", "doi", "org", "journal", "vol", "issue", "et", "al"]);
-  const words = text.split(/[\s,.-]+/).map(w => w.toLowerCase().replace(/[^a-z]/g, '')).filter(w => w.length > 4 && !stopWords.has(w));
+  const words = text.split(/[\s,.-]+/)
+    .map(w => w.toLowerCase().replace(/[^a-z]/g, ''))
+    .filter(w => w.length > 4 && !stopWords.has(w));
+    
   const freq = {};
   words.forEach(w => freq[w] = (freq[w] || 0) + 1);
-  return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(entry => entry[0].charAt(0).toUpperCase() + entry[0].slice(1));
+  
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(entry => entry[0].charAt(0).toUpperCase() + entry[0].slice(1));
 };
 
 function App() {
@@ -87,6 +93,10 @@ function App() {
   const [doiInput, setDoiInput] = useState("");
   const [isFetching, setIsFetching] = useState(false);
 
+  // BibTeX Import State
+  const [bibtexInput, setBibtexInput] = useState("");
+  const [showBibtexModal, setShowBibtexModal] = useState(false);
+
   // Reader State
   const [numPages, setNumPages] = useState(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -94,40 +104,60 @@ function App() {
   const [highlights, setHighlights] = useState([]);
   const [postits, setPostits] = useState([]);
   const [selectedColor, setSelectedColor] = useState(HIGHLIGHT_COLORS[0]);
-  const [showSidebar, setShowSidebar] = useState(IS_DESKTOP); // always desktop by default
+  const [showSidebar, setShowSidebar] = useState(true); // Default true for desktop
   const [sidebarTab, setSidebarTab] = useState('toc');
   const [darkMode, setDarkMode] = useState(false);
   const [pomodoroTime, setPomodoroTime] = useState(25 * 60);
   const [pomodoroRunning, setPomodoroRunning] = useState(false);
   const [isHighlightMode, setIsHighlightMode] = useState(false);
   const pomodoroRef = useRef(null);
+  
+  const graphRef = useRef();
+  const [readingStats, setReadingStats] = useState(null);
 
-  // Scroll fix for dashboard/kanban
-  useEffect(() => {
-    document.body.style.overflow = 'unset';
-    return () => { document.body.style.overflow = 'unset'; };
-  }, []);
+  // --- NOTIFICATION STATE ---
+  const [toasts, setToasts] = useState([]); 
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: "", onConfirm: null });
+
+  const addToast = (message, type = 'info') => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
 
   // Keyboard navigation for PDF reader
   useEffect(() => {
     if (activeView !== 'reader') return;
+    
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        e.preventDefault(); goToPreviousPage();
+        e.preventDefault();
+        goToPreviousPage();
       } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        e.preventDefault(); goToNextPage();
+        e.preventDefault();
+        goToNextPage();
       } else if (e.key === '+' || e.key === '=') {
-        e.preventDefault(); setScale(s => Math.min(s + 0.2, 3.0));
+        e.preventDefault();
+        setScale(s => Math.min(s + 0.2, 3.0));
       } else if (e.key === '-' || e.key === '_') {
-        e.preventDefault(); setScale(s => Math.max(s - 0.2, 0.5));
+        e.preventDefault();
+        setScale(s => Math.max(s - 0.2, 0.5));
       }
     };
+    
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeView, pageNumber, numPages]);
 
-  const goToPreviousPage = () => setPageNumber(prev => Math.max(prev - 1, 1));
-  const goToNextPage = () => setPageNumber(prev => Math.min(prev + 1, numPages || prev));
+  const goToPreviousPage = () => {
+    setPageNumber(prev => Math.max(prev - 1, 1));
+  };
+
+  const goToNextPage = () => {
+    setPageNumber(prev => Math.min(prev + 1, numPages || prev));
+  };
 
   // --- DATA & AUTH ---
   useEffect(() => {
@@ -136,6 +166,7 @@ function App() {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setPapers(loaded);
+      
       if (typeof calculateReadingStats === 'function') {
         const stats = calculateReadingStats(loaded, []);
         setReadingStats(stats);
@@ -162,20 +193,448 @@ function App() {
       setPostits(p ? JSON.parse(p) : []);
       setPageNumber(1);
       setIsHighlightMode(false);
-      // Always open sidebar on desktop
+      // Auto-show sidebar on desktop when opening a paper
       if (typeof window !== 'undefined' && window.innerWidth >= 768) {
         setShowSidebar(true);
       }
     }
   }, [selectedPaper]);
 
-  // ...rest unchanged - see previous working sidebar logic for PDF reader and dashboard...
-  // Key fixes:
-  // - All PDF page containers and overlays now use overflow-auto (never hidden)
-  // - Sidebar/tab logic never disables rendering of tab content
-  // - Main body and kanban use min-h-screen and overflow-auto to allow scrolling everywhere
+  const extractMetadata = async (file) => {
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjs.getDocument(arrayBuffer);
+      const pdf = await loadingTask.promise;
+      const metadata = await pdf.getMetadata();
+      let authorCandidate = metadata?.info?.Author || "";
+      const page = await pdf.getPage(1);
+      const textContent = await page.getTextContent();
+      
+      let maxFontSize = 0;
+      let titleCandidate = "";
+      let fullText = "";
+      textContent.items.forEach((item) => {
+        const str = item.str.trim();
+        if (!str) return;
+        fullText += str + " ";
+        const fontSize = Math.abs(item.transform[3]);
+        if (fontSize > maxFontSize) {
+          maxFontSize = fontSize;
+          titleCandidate = str;
+        } else if (Math.abs(fontSize - maxFontSize) < 1 && fontSize > 10) {
+          titleCandidate += " " + str;
+        }
+      });
 
-  // Note: For brevity, the full JSX section is not reproduced here, but all necessary style and logic fixes are applied as described.
+      const doiMatch = fullText.match(/10\.\d{4,9}\/[-._;()/:A-Z0-9]+/i);
+      let pdfHash = "";
+      try { if (typeof calculatePDFHash === 'function') pdfHash = await calculatePDFHash(file); } catch (e) {}
+      
+      if (doiMatch) {
+          const cleanDoi = doiMatch[0];
+          addToast(`DOI detected: ${cleanDoi}`, "info");
+          try {
+              const citationData = await fetchSemanticScholarData(cleanDoi, 'DOI');
+              if (citationData && !citationData.error) {
+                  return {
+                      title: citationData.title,
+                      tags: generateSmartTags(citationData.title),
+                      authors: "", abstract: "", year: new Date().getFullYear().toString(), venue: "",
+                      doi: cleanDoi, citationCount: citationData.citationCount || 0,
+                      semanticScholarId: citationData.paperId, pdfHash, source: 'doi'
+                  };
+              }
+          } catch (e) {}
+      }
+      if (titleCandidate.length < 5) titleCandidate = file.name.replace('.pdf', '');
+      return { title: titleCandidate, tags: generateSmartTags(fullText), authors: authorCandidate, abstract: "", year: new Date().getFullYear().toString(), venue: "", pdfHash, source: 'local' };
+  };
+
+  const processFile = async (file) => {
+      const metadata = await extractMetadata(file);
+      if (typeof findDuplicatePapers === 'function') {
+        const duplicates = findDuplicatePapers(metadata, papers);
+        if (duplicates.length > 0) addToast(`⚠️ Possible duplicate: "${duplicates[0].title}"`, "warning");
+      }
+      const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
+      await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
+      let thumbnailUrl = "";
+      try { if (typeof generatePDFThumbnail === 'function') thumbnailUrl = await generatePDFThumbnail(url); } catch (e) {}
+      
+      await addDoc(collection(db, "papers"), {
+        userId: user.uid, title: metadata.title, link: "", tags: metadata.tags, color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
+        status: "to-read", abstract: metadata.abstract, authors: metadata.authors, year: metadata.year, venue: metadata.venue,
+        notes: "", pdfUrl: url, doi: metadata.doi || "", citationCount: metadata.citationCount || 0, pdfHash: metadata.pdfHash || "",
+        thumbnailUrl: thumbnailUrl, createdAt: Date.now(), addedDate: Date.now(),
+        rating: 0, methods: [], organisms: [], hypotheses: []
+      });
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault(); setIsDraggingFile(false);
+    const files = Array.from(e.dataTransfer.files).filter(file => file.type === 'application/pdf');
+    if (files.length > 0) {
+        setIsUploading(true);
+        for (let i = 0; i < files.length; i++) {
+            setUploadStatus(`Processing ${i + 1}/${files.length}...`);
+            await processFile(files[i]);
+        }
+        setIsUploading(false);
+        addToast("Upload complete!", "success");
+    } else addToast("Please drop valid PDF files.", "error");
+  };
+  
+  const handleFileSelect = async (e) => { 
+    if (e.target.files?.length) { 
+      setIsUploading(true); 
+      for(let i=0; i<e.target.files.length; i++) await processFile(e.target.files[i]); 
+      setIsUploading(false); 
+    }
+  };
+
+  const deletePaper = (id) => {
+    setConfirmDialog({
+      isOpen: true,
+      message: "This will permanently delete the paper and all its annotations.",
+      onConfirm: async () => {
+        await deleteDoc(doc(db, "papers", id));
+        addToast("Paper deleted", "info");
+        setConfirmDialog({ isOpen: false, message: "", onConfirm: null });
+      }
+    });
+  };
+
+  const handleStatusChange = async (id, newStatus) => {
+    await updateDoc(doc(db, "papers", id), { status: newStatus });
+  };
+
+  const allUniqueTags = useMemo(() => {
+    const tags = new Set();
+    papers.forEach(p => p.tags?.forEach(t => tags.add(t)));
+    return Array.from(tags).sort();
+  }, [papers]);
+
+  const filteredPapers = papers.filter(p => {
+    const q = searchTerm.toLowerCase();
+    return p.title.toLowerCase().includes(q) || p.tags?.some(t => t.toLowerCase().includes(q));
+  });
+
+  const SharedUI = () => (
+    <>
+      <div className="fixed bottom-4 md:bottom-6 right-4 md:right-6 z-50 flex flex-col gap-2 md:gap-3 pointer-events-none max-w-[calc(100vw-2rem)]">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`pointer-events-auto flex items-center gap-2 md:gap-3 p-3 md:p-4 bg-white border-3 md:border-4 border-black shadow-nb min-w-[280px] md:min-w-[300px] animate-in slide-in-from-right`}>
+            {toast.type === 'success' && <Check className="text-green-600 shrink-0" size={20} strokeWidth={3} />}
+            {toast.type === 'error' && <AlertCircle className="text-red-600 shrink-0" size={20} strokeWidth={3} />}
+            {toast.type === 'info' && <Info className="text-blue-600 shrink-0" size={20} strokeWidth={3} />}
+            {toast.type === 'warning' && <AlertCircle className="text-yellow-600 shrink-0" size={20} strokeWidth={3} />}
+            <p className="font-bold uppercase text-xs md:text-sm break-words">{toast.message}</p>
+          </div>
+        ))}
+      </div>
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+           <div className="bg-white border-3 md:border-4 border-black shadow-nb p-6 md:p-8 max-w-md w-full text-center">
+              <h2 className="text-xl md:text-2xl font-black uppercase mb-2">Are you sure?</h2>
+              <p className="font-bold text-sm md:text-base text-gray-600 mb-4 md:mb-6">{confirmDialog.message}</p>
+              <div className="flex gap-3 md:gap-4">
+                 <button onClick={() => setConfirmDialog({ isOpen: false, message: "", onConfirm: null })} className="flex-1 nb-button bg-white text-sm md:text-base">Cancel</button>
+                 <button onClick={confirmDialog.onConfirm} className="flex-1 nb-button bg-red-500 text-white border-black text-sm md:text-base">Confirm</button>
+              </div>
+           </div>
+        </div>
+      )}
+      {showMetadataModal && editingPaper && (
+        <EnhancedMetadataModal
+          paper={editingPaper}
+          allTags={allUniqueTags}
+          onClose={() => {
+            setShowMetadataModal(false);
+            setEditingPaper(null);
+          }}
+          onSave={async (data) => {
+            await updateDoc(doc(db, "papers", editingPaper.id), {
+              ...data,
+              modifiedDate: Date.now()
+            });
+            addToast("Paper updated successfully!", "success");
+          }}
+          addToast={addToast}
+        />
+      )}
+    </>
+  );
+
+  if (!isAuthorized) return (
+    <div className="min-h-screen flex items-center justify-center bg-nb-yellow p-4">
+      <div className="bg-white border-3 md:border-4 border-black shadow-nb p-6 md:p-8 max-w-md w-full text-center">
+        <Lock className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4" strokeWidth={3} />
+        <h1 className="text-2xl md:text-3xl font-black uppercase mb-4">Restricted Access</h1>
+        <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} className="nb-input text-center mb-4 text-base" placeholder="PASSWORD" />
+        <button onClick={() => passwordInput === APP_PASSWORD && setIsAuthorized(true)} className="nb-button w-full text-base">UNLOCK</button>
+      </div>
+    </div>
+  );
+  
+  if (!user) return (
+    <div className="min-h-screen flex items-center justify-center bg-nb-cyan p-4">
+      <div className="bg-white border-3 md:border-4 border-black shadow-nb md:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] p-8 md:p-10 max-w-md w-full text-center">
+        <BookOpen className="w-16 h-16 md:w-20 md:h-20 mx-auto mb-4 md:mb-6" strokeWidth={3}/>
+        <h1 className="text-3xl md:text-5xl font-black uppercase mb-4 md:mb-2 tracking-tighter">Paper Vault</h1>
+        <button onClick={signInWithGoogle} className="w-full border-3 md:border-4 border-black bg-nb-pink p-3 md:p-4 font-black flex items-center justify-center gap-2 md:gap-3 text-base md:text-lg hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] md:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <User strokeWidth={3} /> ENTER WITH GOOGLE
+        </button>
+      </div>
+    </div>
+  );
+
+  if (activeView === 'analytics' && readingStats) {
+    return (
+      <div className="h-screen flex flex-col bg-nb-gray">
+        <SharedUI />
+        <div className="bg-white border-b-3 md:border-b-4 border-black p-3 md:p-4 flex justify-between items-center">
+          <button onClick={() => setActiveView('library')} className="nb-button flex gap-2 text-black text-sm md:text-base"><ChevronLeft /> Back</button>
+          <h1 className="text-xl md:text-3xl font-black uppercase">Analytics</h1>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
+          <div className="col-span-1 lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            <div className="nb-card p-4 md:p-6 bg-nb-yellow">
+              <div className="text-3xl md:text-4xl font-black mb-2">{readingStats.papersReadTotal}</div>
+              <div className="text-xs md:text-sm font-bold uppercase">Papers Read</div>
+            </div>
+            <div className="nb-card p-4 md:p-6 bg-nb-cyan">
+              <div className="text-3xl md:text-4xl font-black mb-2">{readingStats.currentStreak}</div>
+              <div className="text-xs md:text-sm font-bold uppercase">Day Streak 🔥</div>
+            </div>
+            <div className="nb-card p-4 md:p-6 bg-nb-pink">
+              <div className="text-3xl md:text-4xl font-black mb-2">{formatReadingTime ? formatReadingTime(readingStats.totalReadingTime) : readingStats.totalReadingTime}</div>
+              <div className="text-xs md:text-sm font-bold uppercase">Total Reading Time</div>
+            </div>
+          </div>
+          
+          <div className="h-64 md:h-96">
+             <TagCloud papers={papers} onTagClick={(tag) => setSearchTerm(tag)} />
+          </div>
+          
+          <div className="h-64 md:h-96">
+             <AuthorNetwork papers={papers} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activeView === 'reader' && selectedPaper) {
+    return (
+      <div className={`h-screen flex flex-col ${darkMode ? 'bg-gray-900 text-white' : 'bg-nb-yellow'}`}>
+        <SharedUI />
+        <div className={`${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-black'} border-b-3 md:border-b-4 p-2 md:p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 z-20`}>
+          <div className="flex items-center gap-2 md:gap-4 w-full sm:w-auto">
+            <button onClick={() => setActiveView('library')} className="nb-button flex gap-1 md:gap-2 text-black text-xs md:text-base shrink-0"><ChevronLeft strokeWidth={3} size={18} /> Back</button>
+            <h2 className="font-black text-sm md:text-xl uppercase truncate tracking-tight text-black">{selectedPaper.title}</h2>
+          </div>
+          <div className="flex items-center gap-2 md:gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+            <button 
+              onClick={() => setShowSidebar(!showSidebar)} 
+              className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm"
+              title="Toggle Sidebar"
+            >
+              <Menu strokeWidth={3} size={18} />
+            </button>
+            <button onClick={() => setDarkMode(!darkMode)} className="p-2 border-2 border-black bg-white hover:bg-gray-100 text-black shadow-nb-sm">{darkMode ? <Sun strokeWidth={3} size={18}/> : <Moon strokeWidth={3} size={18}/>}</button>
+            <div className="hidden sm:flex items-center border-2 border-black px-2 py-1 gap-2 bg-white text-black shadow-nb-sm">
+              <Timer size={16} strokeWidth={3} />
+              <span className="font-mono font-bold text-sm">{Math.floor(pomodoroTime/60)}:{(pomodoroTime%60).toString().padStart(2,'0')}</span>
+              <button onClick={() => setPomodoroRunning(!pomodoroRunning)} className={`px-2 text-xs font-bold border-2 border-black ${pomodoroRunning ? 'bg-nb-orange' : 'bg-nb-lime'}`}>{pomodoroRunning ? 'STOP' : 'GO'}</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 flex overflow-hidden relative">
+           <div className={`flex-1 overflow-auto p-2 md:p-8 flex flex-col items-center bg-[radial-gradient(circle,_#000_1px,_transparent_1px)] [background-size:20px_20px] ${darkMode ? 'bg-gray-900' : 'bg-nb-gray'}`}>
+              {/* PDF Navigation Controls */}
+              <div className="sticky top-2 z-10 mb-4 flex items-center gap-2 bg-white border-3 border-black shadow-nb p-2">
+                <button 
+                  onClick={goToPreviousPage}
+                  disabled={pageNumber <= 1}
+                  className="nb-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Previous Page (←)"
+                >
+                  <ChevronLeft size={20} strokeWidth={3} />
+                </button>
+                
+                <div className="flex items-center gap-2 px-3">
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max={numPages || 1}
+                    value={pageNumber}
+                    onChange={(e) => {
+                      const page = parseInt(e.target.value);
+                      if (page >= 1 && page <= (numPages || 1)) {
+                        setPageNumber(page);
+                      }
+                    }}
+                    className="w-16 text-center border-2 border-black px-2 py-1 font-bold"
+                  />
+                  <span className="font-bold text-sm">/ {numPages || '?'}</span>
+                </div>
+                
+                <button 
+                  onClick={goToNextPage}
+                  disabled={pageNumber >= (numPages || 1)}
+                  className="nb-button p-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Next Page (→)"
+                >
+                  <ChevronRight size={20} strokeWidth={3} />
+                </button>
+
+                <div className="border-l-2 border-black h-8 mx-2"></div>
+
+                <button 
+                  onClick={() => setScale(s => Math.max(s - 0.2, 0.5))}
+                  className="nb-button p-2"
+                  title="Zoom Out (-)"
+                >
+                  <ZoomOut size={20} strokeWidth={3} />
+                </button>
+                
+                <span className="font-bold text-sm px-2">{Math.round(scale * 100)}%</span>
+                
+                <button 
+                  onClick={() => setScale(s => Math.min(s + 0.2, 3.0))}
+                  className="nb-button p-2"
+                  title="Zoom In (+)"
+                >
+                  <ZoomIn size={20} strokeWidth={3} />
+                </button>
+              </div>
+
+              <div className="relative h-fit pdf-page-container">
+                 <Document 
+                   file={selectedPaper.pdfUrl} 
+                   onLoadSuccess={({ numPages }) => setNumPages(numPages)} 
+                   loading={<div className="flex items-center gap-2 font-bold bg-white p-3 md:p-4 border-3 md:border-4 border-black shadow-nb text-sm"><Loader2 className="animate-spin"/> Loading PDF...</div>}
+                 >
+                    <Page 
+                      pageNumber={pageNumber} 
+                      scale={scale} 
+                      renderTextLayer={true} 
+                      renderAnnotationLayer={true} 
+                      className="shadow-nb-lg" 
+                      width={typeof window !== 'undefined' && window.innerWidth < 768 ? Math.min(window.innerWidth - 32, 600) : undefined} 
+                    />
+                 </Document>
+              </div>
+           </div>
+
+           {showSidebar && (
+             <div className={`fixed md:relative inset-0 md:inset-auto w-full md:w-80 z-50 md:z-auto border-l-3 md:border-l-4 border-black flex flex-col ${darkMode ? 'bg-gray-800 text-white' : 'bg-white'}`}>
+                <div className="flex border-b-3 md:border-b-4 border-black bg-gray-100">
+                  <button onClick={() => setSidebarTab('toc')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'toc' ? 'bg-nb-yellow text-black' : 'text-gray-500'}`}>Outline</button>
+                  <button onClick={() => setSidebarTab('ai')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'ai' ? 'bg-nb-purple text-black' : 'text-gray-500'}`}>AI</button>
+                  <button onClick={() => setSidebarTab('related')} className={`flex-1 p-2 font-bold uppercase text-xs ${sidebarTab === 'related' ? 'bg-nb-lime text-black' : 'text-gray-500'}`}>Related</button>
+                  <button onClick={() => setShowSidebar(false)} className="p-2 hover:bg-red-500 hover:text-white text-black"><X size={18}/></button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto">
+                   {sidebarTab === 'toc' && (
+                     <TOCSidebar pdfUrl={selectedPaper.pdfUrl} onNavigate={(page) => setPageNumber(page)} />
+                   )}
+                   
+                   {sidebarTab === 'ai' && (
+                     <div className="p-4">
+                       <AISummary paper={selectedPaper} />
+                     </div>
+                   )}
+                   
+                   {sidebarTab === 'related' && (
+                     <RelatedWorkFinder 
+                       currentPaper={selectedPaper} 
+                       onImport={async (newPaperData) => {
+                         await addDoc(collection(db, "papers"), {
+                           userId: user.uid,
+                           title: newPaperData.title,
+                           status: "to-read",
+                           color: COLORS[0].class,
+                           tags: [],
+                           ...newPaperData,
+                           createdAt: Date.now()
+                         });
+                         addToast("Paper added to To-Read", "success");
+                       }}
+                     />
+                   )}
+                </div>
+             </div>
+           )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-nb-gray flex flex-col font-sans text-black">
+      <SharedUI />
+      <header className="bg-white border-b-3 md:border-b-4 border-black p-3 md:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm sticky top-0 z-30">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="bg-black text-white p-1.5 md:p-2">
+            <BookOpen strokeWidth={3} size={24} className="md:w-8 md:h-8" />
+          </div>
+          <h1 className="text-2xl md:text-4xl font-black uppercase tracking-tighter">Paper Vault</h1>
+        </div>
+        <div className="flex gap-2 md:gap-4 w-full sm:w-auto">
+          <button onClick={() => setActiveView('analytics')} className="flex-1 sm:flex-initial nb-button flex gap-1 md:gap-2 text-xs md:text-base justify-center"><BarChart3 strokeWidth={3} size={18} /> Analytics</button>
+          <button onClick={logout} className="flex-1 sm:flex-initial nb-button flex gap-1 md:gap-2 text-xs md:text-base justify-center"><LogOut strokeWidth={3} size={18} /> Exit</button>
+        </div>
+      </header>
+      
+      <div className="bg-white border-b-3 md:border-b-4 border-black p-4 md:p-6 z-20">
+         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 md:gap-4 w-full sm:w-auto overflow-x-auto">
+               <button onClick={() => setInputMode('drop')} className={`text-xs md:text-sm font-black uppercase border-b-3 md:border-b-4 pb-1 whitespace-nowrap ${inputMode === 'drop' ? 'border-nb-purple' : 'border-transparent'}`}>Smart Drop</button>
+               <button onClick={() => setInputMode('manual')} className={`text-xs md:text-sm font-black uppercase border-b-3 md:border-b-4 pb-1 whitespace-nowrap ${inputMode === 'manual' ? 'border-nb-lime' : 'border-transparent'}`}>Manual Entry</button>
+            </div>
+            <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={3} size={16} />
+                <input className="nb-input pl-10 py-2 text-sm w-full" placeholder="Search Library..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+            </div>
+         </div>
+
+         {inputMode === 'drop' ? (
+            <div 
+              onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+              onDragLeave={() => setIsDraggingFile(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-3 md:border-4 border-dashed h-24 md:h-32 flex flex-col items-center justify-center cursor-pointer ${isDraggingFile ? 'border-nb-purple bg-purple-50' : 'border-gray-300 bg-gray-50'}`}
+            >
+               <div className="text-center px-4">
+                  <p className="font-black text-base md:text-xl uppercase">Drop PDF Here</p>
+                  <p className="text-xs md:text-sm text-gray-500">Auto-detect: Metadata, Thumbnails, Duplicates</p>
+               </div>
+               <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" multiple onChange={handleFileSelect} />
+            </div>
+         ) : (
+            <div className="bg-nb-gray p-3 md:p-4 border-3 md:border-4 border-black flex flex-col sm:flex-row gap-2">
+               <input value={doiInput} onChange={e => setDoiInput(e.target.value)} className="nb-input flex-1 text-sm md:text-base" placeholder="Paste DOI..." />
+               <button disabled={isFetching} className="nb-button bg-nb-purple flex gap-2 justify-center text-sm md:text-base">{isFetching ? <Loader2 className="animate-spin"/> : <Wand2/>} Auto-Fill</button>
+            </div>
+         )}
+      </div>
+
+      <VirtualKanbanBoard 
+        papers={filteredPapers} 
+        onStatusChange={handleStatusChange}
+        onRead={(p) => { setSelectedPaper(p); setActiveView('reader'); }}
+        onEdit={(p) => { 
+          setEditingPaper(p); 
+          setShowMetadataModal(true); 
+        }}
+        onDelete={deletePaper}
+      />
+    </div>
+  );
 }
 
 export default App;
