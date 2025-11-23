@@ -9,11 +9,14 @@ export async function fetchSemanticScholarData(
 ): Promise<CitationData | null> {
   try {
     let url = '';
+    // Request all the fields we need for complete metadata
+    const fields = 'paperId,externalIds,title,authors,abstract,year,venue,citationCount,references,citations,publicationDate';
+    
     if (identifierType === 'Title') {
       // Search by title
       const searchUrl = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(
         identifier
-      )}&fields=paperId,externalIds,title,citationCount,references,citations&limit=1`;
+      )}&fields=${fields}&limit=1`;
       const searchResponse = await fetch(searchUrl);
       const searchData = await searchResponse.json();
       if (searchData.data && searchData.data.length > 0) {
@@ -22,7 +25,7 @@ export async function fetchSemanticScholarData(
       return null;
     } else {
       // Direct lookup
-      url = `https://api.semanticscholar.org/graph/v1/paper/${identifierType}:${identifier}?fields=paperId,externalIds,title,citationCount,references,citations`;
+      url = `https://api.semanticscholar.org/graph/v1/paper/${identifierType}:${identifier}?fields=${fields}`;
     }
 
     const response = await fetch(url);
