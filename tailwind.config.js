@@ -4,19 +4,26 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  safelist: [
+    "animate-fade-in",
+    "animate-slide-up",
+    "animate-scale-in",
+    "animate-slide-in-right",
+    "animate-bounce-subtle",
+    "animate-shimmer"
+  ],
   theme: {
     extend: {
       colors: {
-        // Professional muted palette for scientific tools
-        'nb-slate': '#64748b',      // Primary accent - muted blue-gray
-        'nb-stone': '#78716c',      // Secondary - warm gray
-        'nb-zinc': '#71717a',       // Tertiary - cool gray
-        'nb-neutral': '#737373',    // Neutral gray
-        'nb-teal': '#5f9ea0',       // Muted teal for highlights
-        'nb-amber': '#d4a574',      // Soft amber for important items
+        'nb-slate': '#64748b',
+        'nb-stone': '#78716c',
+        'nb-zinc': '#71717a',
+        'nb-neutral': '#737373',
+        'nb-teal': '#5f9ea0',
+        'nb-amber': '#d4a574',
         'nb-white': '#ffffff',
-        'nb-gray': '#f5f5f4',       // Softer background
-        'nb-darkgray': '#44403c',   // Dark text
+        'nb-gray': '#f5f5f4',
+        'nb-darkgray': '#44403c',
       },
       boxShadow: {
         'nb': '4px 4px 0px 0px rgba(0, 0, 0, 1)',
