@@ -11,13 +11,14 @@ interface EnhancedMetadataModalProps {
   addToast: (message: string, type?: string) => void;
 }
 
+// Muted, professional palette for color grading
 const COLORS = [
-  { name: 'Yellow', class: 'bg-nb-yellow', hex: '#FFD90F' },
-  { name: 'Cyan', class: 'bg-nb-cyan', hex: '#22d3ee' },
-  { name: 'Pink', class: 'bg-nb-pink', hex: '#FF90E8' },
-  { name: 'Lime', class: 'bg-nb-lime', hex: '#a3e635' },
-  { name: 'Purple', class: 'bg-nb-purple', hex: '#c084fc' },
-  { name: 'Orange', class: 'bg-nb-orange', hex: '#fb923c' },
+  { name: 'Slate', class: 'bg-nb-slate', hex: '#64748b' },
+  { name: 'Stone', class: 'bg-nb-stone', hex: '#78716c' },
+  { name: 'Teal', class: 'bg-nb-teal', hex: '#5f9ea0' },
+  { name: 'Amber', class: 'bg-nb-amber', hex: '#d4a574' },
+  { name: 'Zinc', class: 'bg-nb-zinc', hex: '#71717a' },
+  { name: 'Neutral', class: 'bg-nb-neutral', hex: '#737373' },
 ];
 
 const COMMON_METHODS = [
@@ -54,62 +55,44 @@ export function EnhancedMetadataModal({
   const [isFetchingCitations, setIsFetchingCitations] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // ANIMATION HOOK: Triggers animation on mount
+  const [animateModal, setAnimateModal] = useState(false);
+  useEffect(() => { setAnimateModal(true); }, []);
+
   const fetchMetadataFromDOI = async () => {
     const currentDoi = formData.doi?.trim();
-    
     if (!currentDoi) {
       addToast("Please add a DOI first.", "error");
       return;
     }
-
     setIsFetchingCitations(true);
     try {
-      // Normalize DOI to handle all formats
       const cleanDoi = normalizeDOI(currentDoi);
-      
       if (!cleanDoi) {
         addToast("Invalid DOI format. Try: 10.xxxx/xxxx or https://doi.org/10.xxxx/xxxx", "error");
         setIsFetchingCitations(false);
         return;
       }
-
-      console.log('Fetching metadata for normalized DOI:', cleanDoi);
       const data = await fetchSemanticScholarData(cleanDoi, 'DOI');
-      
       if (data) {
-        console.log('Received data from Semantic Scholar:', data);
-        
-        // Extract authors
-        let authorsString = formData.authors || "";
-        if (data.authors && Array.isArray(data.authors) && data.authors.length > 0) {
-          authorsString = data.authors.map((author: any) => author.name).join(", ");
-        }
-        
-        // Extract year
-        let yearString = formData.year || "";
-        if (data.year) {
-          yearString = data.year.toString();
-        } else if (data.publicationDate) {
-          yearString = data.publicationDate.split('-')[0];
-        }
-
-        // Create updated form data with all fetched metadata
-        const updatedData = {
+        // Extract authors & year from response
+        let authorsString = (data.authors && Array.isArray(data.authors) && data.authors.length > 0)
+          ? data.authors.map((author: any) => author.name).join(", ")
+          : formData.authors || "";
+        let yearString = data.year?.toString() || (data.publicationDate ? data.publicationDate.split('-')[0] : formData.year || "");
+        // Update all form fields with fetched metadata
+        setFormData({
           ...formData,
-          doi: cleanDoi, // Always use the normalized DOI
+          doi: cleanDoi,
           title: data.title || formData.title,
           authors: authorsString,
           abstract: data.abstract || formData.abstract,
           year: yearString,
           venue: data.venue || formData.venue,
           citationCount: data.citationCount || 0,
-          semanticScholarId: data.paperId || formData.semanticScholarId
-        };
-        
-        console.log('Updating form data with:', updatedData);
-        setFormData(updatedData);
-        
-        addToast(`✓ Metadata fetched! ${data.citationCount || 0} citations found.`, "success");
+          semanticScholarId: data.paperId || formData.semanticScholarId,
+        });
+        addToast(`\u2713 Metadata fetched! ${data.citationCount || 0} citations found.`, "success");
       } else {
         addToast("DOI not found in Semantic Scholar database.", "error");
       }
@@ -125,7 +108,6 @@ export function EnhancedMetadataModal({
       addToast("Title is required!", "error");
       return;
     }
-
     setIsSaving(true);
     try {
       await onSave(formData);
@@ -138,22 +120,19 @@ export function EnhancedMetadataModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white border-4 border-black shadow-nb w-full max-w-2xl p-8 relative max-h-[90vh] overflow-y-auto">
-        <button 
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm nb-modal-backdrop animate-fade-in">
+      <div className={`bg-white border-4 border-black shadow-nb w-full max-w-2xl p-8 relative max-h-[90vh] overflow-y-auto nb-modal-content ${animateModal ? 'animate-slide-up' : ''}`}>        <button 
           onClick={onClose} 
           className="absolute top-4 right-4 hover:rotate-90 transition-transform"
         >
           <X size={32} strokeWidth={3} />
         </button>
-        
         <h2 className="text-3xl font-black uppercase mb-6 border-b-4 border-black pb-2">
           Edit Metadata
         </h2>
-        
         <div className="space-y-4">
           {/* DOI with Auto-Fill (moved to top for better UX) */}
-          <div className="bg-nb-purple/10 p-4 border-2 border-nb-purple">
+          <div className="bg-nb-zinc/10 p-4 border-2 border-nb-zinc animate-fade-in">
             <label className="font-bold block mb-2 text-sm uppercase flex items-center gap-2">
               <Wand2 size={16} /> DOI - Auto-Fill All Fields
             </label>
@@ -172,7 +151,7 @@ export function EnhancedMetadataModal({
               <button
                 onClick={fetchMetadataFromDOI}
                 disabled={isFetchingCitations || !formData.doi?.trim()}
-                className="nb-button bg-nb-purple flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="nb-button bg-nb-teal flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed animate-fade-in"
               >
                 {isFetchingCitations ? (
                   <>
@@ -191,14 +170,13 @@ export function EnhancedMetadataModal({
 
           {/* Citation Count Display */}
           {(formData.citationCount || 0) > 0 && (
-            <div className="bg-nb-lime p-4 border-2 border-black animate-in fade-in">
+            <div className="bg-nb-amber p-4 border-2 border-black animate-fade-in">
               <p className="font-bold text-sm flex items-center gap-2">
                 <Award size={20} />
                 {formData.citationCount} citations on Semantic Scholar
               </p>
             </div>
           )}
-          
           {/* Title */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Title *</label>
@@ -209,7 +187,6 @@ export function EnhancedMetadataModal({
               placeholder="Paper title"
             />
           </div>
-          
           {/* Authors */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Authors</label>
@@ -220,7 +197,6 @@ export function EnhancedMetadataModal({
               placeholder="Author names (comma separated)"
             />
           </div>
-          
           {/* Year & Venue */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -242,7 +218,6 @@ export function EnhancedMetadataModal({
               />
             </div>
           </div>
-          
           {/* Abstract */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Abstract</label>
@@ -254,7 +229,6 @@ export function EnhancedMetadataModal({
               placeholder="Paper abstract..."
             />
           </div>
-          
           {/* Star Rating */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Rating</label>
@@ -263,11 +237,11 @@ export function EnhancedMetadataModal({
                 <button
                   key={star}
                   onClick={() => setFormData({ ...formData, rating: star })}
-                  className="p-2 border-2 border-black hover:bg-nb-yellow transition-colors"
+                  className="p-2 border-2 border-black hover:bg-nb-amber transition-colors"
                 >
                   <Star
                     size={24}
-                    fill={star <= (formData.rating || 0) ? '#FFD90F' : 'none'}
+                    fill={star <= (formData.rating || 0) ? '#d4a574' : 'none'}
                     strokeWidth={2}
                   />
                 </button>
@@ -282,7 +256,6 @@ export function EnhancedMetadataModal({
               )}
             </div>
           </div>
-          
           {/* Tags */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Tags</label>
@@ -293,7 +266,6 @@ export function EnhancedMetadataModal({
               placeholder="Add tag..."
             />
           </div>
-          
           {/* Methods */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Methods</label>
@@ -304,7 +276,6 @@ export function EnhancedMetadataModal({
               placeholder="Add method..."
             />
           </div>
-          
           {/* Organisms */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Model Organisms</label>
@@ -315,7 +286,6 @@ export function EnhancedMetadataModal({
               placeholder="Add organism..."
             />
           </div>
-          
           {/* Hypotheses */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Key Hypotheses</label>
@@ -330,7 +300,6 @@ export function EnhancedMetadataModal({
               placeholder="One hypothesis per line...\nExample: Dopamine modulates learning rate"
             />
           </div>
-          
           {/* Link */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Link</label>
@@ -341,8 +310,7 @@ export function EnhancedMetadataModal({
               placeholder="https://..."
             />
           </div>
-          
-          {/* Color */}
+          {/* Color (category grading with muted palette) */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Color Label</label>
             <div className="flex gap-2 flex-wrap">
@@ -350,15 +318,12 @@ export function EnhancedMetadataModal({
                 <button
                   key={c.name}
                   onClick={() => setFormData({ ...formData, color: c.class })}
-                  className={`w-12 h-12 border-4 border-black ${c.class} ${
-                    formData.color === c.class ? 'ring-4 ring-offset-2 ring-black' : ''
-                  } hover:scale-110 transition-transform`}
+                  className={`w-12 h-12 border-4 border-black ${c.class} ${formData.color === c.class ? 'ring-4 ring-offset-2 ring-black' : ''} hover:scale-110 transition-transform animate-scale-in`}
                   title={c.name}
                 />
               ))}
             </div>
           </div>
-          
           {/* Notes */}
           <div>
             <label className="font-bold block mb-2 text-sm uppercase">Notes</label>
@@ -370,7 +335,6 @@ export function EnhancedMetadataModal({
               placeholder="Personal notes about this paper..."
             />
           </div>
-          
           {/* Actions */}
           <div className="flex gap-4 pt-4 border-t-4 border-black">
             <button 
@@ -382,7 +346,7 @@ export function EnhancedMetadataModal({
             </button>
             <button 
               onClick={handleSave} 
-              className="flex-1 nb-button bg-nb-lime flex items-center justify-center gap-2"
+              className="flex-1 nb-button bg-nb-teal flex items-center justify-center gap-2"
               disabled={isSaving}
             >
               {isSaving ? (
@@ -400,7 +364,6 @@ export function EnhancedMetadataModal({
     </div>
   );
 }
-
 // Tag Input Component
 interface TagInputProps {
   tags: string[];
@@ -408,16 +371,13 @@ interface TagInputProps {
   allTags: string[];
   placeholder?: string;
 }
-
 function TagInput({ tags, setTags, allTags, placeholder = "Add tag..." }: TagInputProps) {
   const [input, setInput] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
-  
   const suggestions = allTags.filter(tag => 
     tag.toLowerCase().includes(input.toLowerCase()) && 
     !tags.includes(tag)
   ).slice(0, 5);
-  
   const addTag = (tag: string) => {
     if (tag && !tags.includes(tag)) {
       setTags([...tags, tag]);
@@ -425,7 +385,6 @@ function TagInput({ tags, setTags, allTags, placeholder = "Add tag..." }: TagInp
       setShowSuggestions(false);
     }
   };
-  
   return (
     <div className="space-y-2">
       <div className="flex gap-2 flex-wrap">
@@ -470,15 +429,14 @@ function TagInput({ tags, setTags, allTags, placeholder = "Add tag..." }: TagInp
             <Plus size={16} /> Add
           </button>
         </div>
-        
         {/* Suggestions dropdown */}
         {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-black shadow-nb z-10 max-h-40 overflow-y-auto">
+          <div className="absolute top-full left-0 right-0 mt-1 bg-white border-2 border-black shadow-nb z-10 max-h-40 overflow-y-auto animate-fade-in">
             {suggestions.map(suggestion => (
               <button
                 key={suggestion}
                 onClick={() => addTag(suggestion)}
-                className="w-full text-left px-3 py-2 hover:bg-nb-yellow font-bold text-sm border-b border-gray-200 last:border-b-0"
+                className="w-full text-left px-3 py-2 hover:bg-nb-slate font-bold text-sm border-b border-gray-200 last:border-b-0"
               >
                 {suggestion}
               </button>
