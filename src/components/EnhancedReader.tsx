@@ -198,7 +198,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               {paper.title}
             </span>
           </div>
-          
           {/* Mode selector */}
           <div className="flex items-center gap-2 bg-gray-100 p-1 rounded border-2 border-black">
             <button 
@@ -210,7 +209,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             >
               <Book size={18}/>
             </button>
-            
             <button 
               onClick={() => setMode('highlight')} 
               className={`p-2 rounded transition-colors ${
@@ -220,7 +218,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             >
               <Highlighter size={18}/>
             </button>
-            
             <button 
               onClick={() => setMode('note')} 
               className={`p-2 rounded transition-colors ${
@@ -230,7 +227,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             >
               <StickyNote size={18}/>
             </button>
-            
             {/* Category selector for highlight mode */}
             {mode === 'highlight' && (
               <select 
@@ -247,7 +243,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               </select>
             )}
           </div>
-
           {/* Zoom and sidebar controls */}
           <div className="flex items-center gap-2">
             <button onClick={zoomOut} className="nb-button p-1" disabled={scale <= 0.5}>
@@ -259,9 +254,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             <button onClick={zoomIn} className="nb-button p-1" disabled={scale >= 3}>
               <ZoomIn size={16}/>
             </button>
-            
             <div className="w-px h-6 bg-black mx-2"></div>
-            
             <button 
               onClick={() => setShowSidebar(!showSidebar)}
               className="nb-button p-2"
@@ -271,7 +264,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             </button>
           </div>
         </div>
-
         {/* Full-Text Search Bar */}
         <div className="border-b-2 border-black">
           <FullTextSearch 
@@ -279,7 +271,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             onResultClick={(result) => setPageNumber(result.page)}
           />
         </div>
-
         {/* PDF Canvas / Upload PDF UI */}
         <div 
           className="flex-1 overflow-auto p-8 flex justify-center" 
@@ -321,7 +312,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               <p className="text-xs text-nb-purple/80">Accepted: PDF only. Max 100MB.</p>
             </div>
           )}
-
           {/* Only show PDF/document UI when there's a PDF */}
           {paper.pdfUrl && (
             <div 
@@ -360,7 +350,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             </div>
           )}
         </div>
-
         {/* Footer Pagination (unchanged) */}
         {paper.pdfUrl && (
           <div className="bg-white border-t-4 border-black p-2 flex justify-center items-center gap-4">
@@ -371,7 +360,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             >
               <ChevronLeft size={16} className="inline" /> Prev
             </button>
-            
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -388,7 +376,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               />
               <span className="font-bold">/ {numPages}</span>
             </div>
-            
             <button 
               onClick={goToNextPage} 
               disabled={pageNumber >= numPages} 
@@ -398,10 +385,8 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             </button>
           </div>
         )}
-
       </div>
-
-      {/* Right Sidebar (unchanged) */}
+      {/* Right Sidebar -- REPAIRED: sidebar switch logic to show content */}
       {showSidebar && (
         <div className="w-96 bg-white border-l-4 border-black flex flex-col">
           <div className="flex border-b-4 border-black">
@@ -414,7 +399,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               <List size={14} className="inline mr-1" />
               TOC
             </button>
-            
             <button 
               onClick={() => setSidebarTab('notes')} 
               className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
@@ -424,7 +408,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               <FileText size={14} className="inline mr-1" />
               Notes
             </button>
-            
             <button 
               onClick={() => setSidebarTab('annotations')} 
               className={`flex-1 p-2 font-bold uppercase text-xs transition-colors relative ${
@@ -439,7 +422,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
                 </span>
               )}
             </button>
-            
             <button 
               onClick={() => setSidebarTab('ai')} 
               className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
@@ -449,7 +431,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               <Wand2 size={14} className="inline mr-1" />
               AI
             </button>
-            
             <button 
               onClick={() => setSidebarTab('related')} 
               className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
@@ -461,8 +442,29 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            {/* ...other sidebar content unchanged... */}
-            {/* Put your sidebar switch logic here as before */}
+            {sidebarTab === 'annotations' && (
+              <AnnotationsSidebar
+                highlights={highlights}
+                postits={postits}
+                onHighlightClick={handleHighlightClick}
+                onHighlightDelete={handleHighlightDelete}
+                onHighlightUpdate={handleHighlightUpdate}
+                onPostItClick={handlePostItClick}
+                onPostItDelete={handlePostItDelete}
+                paperTitle={paper.title}
+              />
+            )}
+            {/* Additional sidebar logic for other tabs as needed */}
+            {sidebarTab === 'toc' && <TableOfContents tocItems={tocItems} onNavigate={setPageNumber} />}
+            {sidebarTab === 'notes' && (
+              <div className="p-6 text-gray-500">Notes tab content placeholder</div>
+            )}
+            {sidebarTab === 'ai' && (
+              <AISummary paper={paper} />
+            )}
+            {sidebarTab === 'related' && (
+              <RelatedWorkFinder paper={paper} papers={papers} onImportPaper={onImportPaper} />
+            )}
           </div>
         </div>
       )}
