@@ -1,4 +1,3 @@
-// src/components/TableOfContents.tsx
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 
@@ -9,13 +8,13 @@ interface TOCItem {
 }
 
 interface Props {
-  items: TOCItem[];
+  items?: TOCItem[];
   currentPage: number;
   onPageClick: (page: number) => void;
 }
 
-export function TableOfContents({ items, currentPage, onPageClick }: Props) {
-  if (items.length === 0) {
+export function TableOfContents({ items = [], currentPage, onPageClick }: Props) {
+  if (!Array.isArray(items) || items.length === 0) {
     return (
       <div className="p-4 text-gray-500 text-sm">
         No table of contents available
