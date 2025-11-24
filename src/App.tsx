@@ -374,6 +374,19 @@ function App() {
     addToast("Review recorded!", "success");
   };
 
+  // NEW: Handler for Read button with DOI redirect
+  const handleRead = (paper) => {
+    // If no PDF uploaded, redirect to DOI website
+    if (!paper.pdfUrl || paper.pdfUrl === "") {
+      const doiUrl = paper.link && paper.link.length > 4 ? paper.link : `https://doi.org/${paper.doi}`;
+      window.open(doiUrl, '_blank');
+      return;
+    }
+    // Otherwise open PDF reader
+    setSelectedPaper(paper);
+    setActiveView('reader');
+  };
+
   const allUniqueTags = useMemo(() => {
     const tags = new Set();
     papers.forEach(p => p.tags?.forEach(t => tags.add(t)));
@@ -644,7 +657,7 @@ function App() {
       <VirtualKanbanBoard 
         papers={filteredPapers} 
         onStatusChange={handleStatusChange}
-        onRead={(p) => { setSelectedPaper(p); setActiveView('reader'); }}
+        onRead={handleRead}
         onEdit={(p) => { 
           setEditingPaper(p); 
           setShowMetadataModal(true); 
