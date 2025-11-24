@@ -14,8 +14,6 @@ import { PostItLayer } from './PostItLayer';
 import { AISummary } from './AISummary';
 import { RelatedWorkFinder } from './RelatedWorkFinder';
 import { extractPDFText, extractPDFOutline } from '../utils/pdfUtils';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
 import {
   createHighlightFromSelection,
   createPostIt,
@@ -42,8 +40,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.2);
-  const [uploading, setUploading] = useState(false);
-
+  
   // Annotation state
   const [highlights, setHighlights] = useState<Highlight[]>(() => loadHighlights(paper.id));
   const [postits, setPostits] = useState<PostIt[]>(() => loadPostIts(paper.id));
@@ -152,104 +149,353 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
     return results;
   };
 
-  // Annotation handlers -- UNCHANGED
-  // ... (omitted here)
+  // Annotation handlers
+  const handleHighlightClick = (highlight: Highlight) => {
+    setPageNumber(highlight.page);
+  };
 
-  // Zoom controls -- UNCHANGED
-  // ... (omitted here)
+  const handleHighlightDelete = (highlight: Highlight) => {
+    setHighlights(highlights.filter(h => h.id !== highlight.id));
+  };
 
-  // Main render
+  const handleHighlightUpdate = (highlight: Highlight) => {
+    setHighlights(highlights.map(h => h.id === highlight.id ? highlight : h));
+  };
+
+  const handlePostItClick = (postit: PostIt) => {
+    setPageNumber(postit.page);
+  };
+
+  const handlePostItDelete = (postit: PostIt) => {
+    setPostits(postits.filter(p => p.id !== postit.id));
+  };
+
+  const handlePostItUpdate = (postit: PostIt) => {
+    setPostits(postits.map(p => p.id === postit.id ? postit : p));
+  };
+
+  // Zoom controls
+  const zoomIn = () => setScale(s => Math.min(3, s + 0.1));
+  const zoomOut = () => setScale(s => Math.max(0.5, s - 0.1));
+
+  // Page navigation
+  const goToPreviousPage = () => setPageNumber(p => Math.max(1, p - 1));
+  const goToNextPage = () => setPageNumber(p => Math.min(numPages, p + 1));
+
   return (
     <div className="flex h-full bg-gray-100">
       {/* Main Reader */}
       <div className="flex-1 flex flex-col">
-        {/* Toolbar ... unchanged ... */}
+        {/* Toolbar */}
+        <div className="bg-white border-b-4 border-black p-2 flex justify-between items-center shadow-md z-10">
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="nb-button">
+              <ChevronLeft size={16} className="inline" /> Back
+            </button>
+            <span className="font-black uppercase truncate max-w-xs text-sm">
+              {paper.title}
+            </span>
+          </div>
+          
+          {/* Mode selector */}
+          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded border-2 border-black">
+            <button 
+              onClick={() => setMode('read')} 
+              className={`p-2 rounded transition-colors ${
+                mode === 'read' ? 'bg-black text-white' : 'hover:bg-white'
+              }`} 
+              title="Read Mode"
+            >
+              <Book size={18}/>
+            </button>
+            
+            <button 
+              onClick={() => setMode('highlight')} 
+              className={`p-2 rounded transition-colors ${
+                mode === 'highlight' ? 'bg-black text-white' : 'hover:bg-white'
+              }`} 
+              title="Highlight Mode"
+            >
+              <Highlighter size={18}/>
+            </button>
+            
+            <button 
+              onClick={() => setMode('note')} 
+              className={`p-2 rounded transition-colors ${
+                mode === 'note' ? 'bg-black text-white' : 'hover:bg-white'
+              }`} 
+              title="Add Sticky Note"
+            >
+              <StickyNote size={18}/>
+            </button>
+            
+            {/* Category selector for highlight mode */}
+            {mode === 'highlight' && (
+              <select 
+                value={activeCategory} 
+                onChange={e => setActiveCategory(e.target.value as Highlight['category'])} 
+                className="text-xs border-black border ml-2 p-1"
+              >
+                <option value="general">General</option>
+                <option value="methodology">Methodology</option>
+                <option value="results">Results</option>
+                <option value="related-work">Related Work</option>
+                <option value="discussion">Discussion</option>
+                <option value="limitation">Limitation</option>
+              </select>
+            )}
+          </div>
 
-        {/* Full-Text Search Bar ... unchanged ... */}
+          {/* Zoom and sidebar controls */}
+          <div className="flex items-center gap-2">
+            <button onClick={zoomOut} className="nb-button p-1" disabled={scale <= 0.5}>
+              <ZoomOut size={16}/>
+            </button>
+            <span className="font-mono font-bold text-sm min-w-[3rem] text-center">
+              {Math.round(scale * 100)}%
+            </span>
+            <button onClick={zoomIn} className="nb-button p-1" disabled={scale >= 3}>
+              <ZoomIn size={16}/>
+            </button>
+            
+            <div className="w-px h-6 bg-black mx-2"></div>
+            
+            <button 
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="nb-button p-2"
+              title={showSidebar ? 'Hide Sidebar' : 'Show Sidebar'}
+            >
+              <List size={16} />
+            </button>
+          </div>
+        </div>
 
-        {/* PDF Canvas / Upload prompt */}
+        {/* Full-Text Search Bar */}
+        <div className="border-b-2 border-black">
+          <FullTextSearch 
+            onSearch={handleFullTextSearch}
+            onResultClick={(result) => setPageNumber(result.page)}
+          />
+        </div>
+
+        {/* PDF Canvas */}
         <div 
           className="flex-1 overflow-auto p-8 flex justify-center" 
           onClick={handleCanvasClick}
           style={{ cursor: mode === 'note' ? 'crosshair' : 'default' }}
         >
-          {/* If no PDF, show upload */}
-          {!paper.pdfUrl && (
-            <div className="w-full max-w-lg mx-auto flex flex-col items-center justify-center border-4 border-dashed border-nb-purple bg-purple-50 p-10 rounded-xl shadow-lg">
-              <p className="text-xl font-bold text-nb-purple mb-2">No PDF uploaded</p>
-              <p className="mb-4 text-gray-700">This paper was added via DOI only. To enable highlights, annotation, and full reading, upload the PDF below.</p>
-              <label className="nb-button bg-nb-purple text-white cursor-pointer mb-2">
-                {uploading ? "Uploading..." : "Upload PDF"}
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    setUploading(true);
-                    try {
-                      const fileRef = ref(storage, `papers/${paper.userId}/${Date.now()}_${file.name}`);
-                      await uploadBytes(fileRef, file);
-                      const url = await getDownloadURL(fileRef);
-                      onUpdate({ pdfUrl: url });
-                    } catch (error) {
-                      alert('Error uploading PDF.');
-                      setUploading(false);
-                      return;
-                    }
-                    setUploading(false);
-                  }}
-                />
-              </label>
-              <p className="text-xs text-nb-purple/80">Accepted: PDF only. Max 100MB.</p>
-            </div>
-          )}
-
-          {/* Only show PDF/document UI when there's a PDF */}
-          {paper.pdfUrl && (
-            <div 
-              className="relative pdf-page-container shadow-nb-lg border-4 border-black" 
-              ref={containerRef} 
-              onMouseUp={handleMouseUp}
-              style={{ userSelect: mode === 'highlight' ? 'text' : 'none' }}
+          <div 
+            className="relative pdf-page-container shadow-nb-lg border-4 border-black" 
+            ref={containerRef} 
+            onMouseUp={handleMouseUp}
+            style={{ userSelect: mode === 'highlight' ? 'text' : 'none' }}
+          >
+            <Document 
+              file={paper.pdfUrl} 
+              onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+              onItemClick={({ pageNumber }) => setPageNumber(pageNumber)} // handle internal PDF links
             >
-              <Document 
-                file={paper.pdfUrl} 
-                onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-                onItemClick={({ pageNumber }) => setPageNumber(pageNumber)} // handle internal PDF links
-              >
-                <Page 
-                  pageNumber={pageNumber} 
-                  scale={scale} 
-                  renderTextLayer={true} 
-                  renderAnnotationLayer={true} 
-                />
-              </Document>
-              <HighlightLayer
-                highlights={highlights}
-                currentPage={pageNumber}
-                scale={scale}
-                onHighlightClick={handleHighlightClick}
-                onHighlightDelete={handleHighlightDelete}
+              <Page 
+                pageNumber={pageNumber} 
+                scale={scale} 
+                renderTextLayer={true} 
+                renderAnnotationLayer={true} 
               />
-              <PostItLayer
-                postits={postits}
-                currentPage={pageNumber}
-                scale={scale}
-                onPostItUpdate={handlePostItUpdate}
-                onPostItDelete={handlePostItDelete}
-                editable={true}
-              />
-            </div>
-          )}
+            </Document>
+            
+            {/* Highlight overlay */}
+            <HighlightLayer
+              highlights={highlights}
+              currentPage={pageNumber}
+              scale={scale}
+              onHighlightClick={handleHighlightClick}
+              onHighlightDelete={handleHighlightDelete}
+            />
+            
+            {/* Post-it overlay */}
+            <PostItLayer
+              postits={postits}
+              currentPage={pageNumber}
+              scale={scale}
+              onPostItUpdate={handlePostItUpdate}
+              onPostItDelete={handlePostItDelete}
+              editable={true}
+            />
+          </div>
         </div>
 
-        {/* Footer Pagination ... unchanged ... */}
+        {/* Footer Pagination */}
+        <div className="bg-white border-t-4 border-black p-2 flex justify-center items-center gap-4">
+          <button 
+            onClick={goToPreviousPage} 
+            disabled={pageNumber <= 1} 
+            className="nb-button disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={16} className="inline" /> Prev
+          </button>
+          
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={numPages}
+              value={pageNumber}
+              onChange={(e) => {
+                const page = parseInt(e.target.value);
+                if (page >= 1 && page <= numPages) {
+                  setPageNumber(page);
+                }
+              }}
+              className="w-16 text-center font-bold border-2 border-black p-1"
+            />
+            <span className="font-bold">/ {numPages}</span>
+          </div>
+          
+          <button 
+            onClick={goToNextPage} 
+            disabled={pageNumber >= numPages} 
+            className="nb-button disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next <ChevronRight size={16} className="inline" />
+          </button>
+        </div>
       </div>
 
-      {/* Right Sidebar ... unchanged ... */}
+      {/* Right Sidebar */}
+      {showSidebar && (
+        <div className="w-96 bg-white border-l-4 border-black flex flex-col">
+          <div className="flex border-b-4 border-black">
+            <button 
+              onClick={() => setSidebarTab('toc')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
+                sidebarTab === 'toc' ? 'bg-nb-yellow' : 'hover:bg-gray-100'
+              }`}
+            >
+              <List size={14} className="inline mr-1" />
+              TOC
+            </button>
+            
+            <button 
+              onClick={() => setSidebarTab('notes')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
+                sidebarTab === 'notes' ? 'bg-nb-yellow' : 'hover:bg-gray-100'
+              }`}
+            >
+              <FileText size={14} className="inline mr-1" />
+              Notes
+            </button>
+            
+            <button 
+              onClick={() => setSidebarTab('annotations')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors relative ${
+                sidebarTab === 'annotations' ? 'bg-nb-yellow' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Highlighter size={14} className="inline mr-1" />
+              Marks
+              {(highlights.length > 0 || postits.length > 0) && (
+                <span className="absolute top-1 right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center">
+                  {highlights.length + postits.length}
+                </span>
+              )}
+            </button>
+            
+            <button 
+              onClick={() => setSidebarTab('ai')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
+                sidebarTab === 'ai' ? 'bg-nb-purple' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Wand2 size={14} className="inline mr-1" />
+              AI
+            </button>
+            
+            <button 
+              onClick={() => setSidebarTab('related')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
+                sidebarTab === 'related' ? 'bg-nb-lime' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Network size={14} className="inline mr-1" />
+              Related
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-hidden">
+            {sidebarTab === 'toc' && (
+              <div className="h-full overflow-y-auto p-4">
+                <TableOfContents 
+                  items={tocItems}
+                  currentPage={pageNumber}
+                  onPageClick={setPageNumber}
+                />
+              </div>
+            )}
+
+            {sidebarTab === 'notes' && (
+              <div className="h-full overflow-y-auto p-4 space-y-4">
+                <h3 className="font-black uppercase mb-2">Structured Notes</h3>
+                {[
+                  { key: 'researchquestion', label: 'Research Question' },
+                  { key: 'methods', label: 'Methods' },
+                  { key: 'results', label: 'Results' },
+                  { key: 'conclusions', label: 'Conclusions' },
+                  { key: 'limitations', label: 'Limitations' },
+                  { key: 'futurework', label: 'Future Work' }
+                ].map(section => (
+                  <div key={section.key}>
+                    <label className="text-xs font-bold uppercase block mb-1">
+                      {section.label}
+                    </label>
+                    <textarea 
+                      className="nb-input text-sm w-full"
+                      rows={3}
+                      placeholder={`Enter ${section.label.toLowerCase()}...`}
+                      value={(paper.structuredNotes as any)?.[section.key] || ''}
+                      onChange={e => {
+                        onUpdate({ 
+                          structuredNotes: { 
+                            ...paper.structuredNotes, 
+                            [section.key]: e.target.value 
+                          } 
+                        });
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {sidebarTab === 'annotations' && (
+              <AnnotationsSidebar
+                highlights={highlights}
+                postits={postits}
+                onHighlightClick={handleHighlightClick}
+                onHighlightDelete={handleHighlightDelete}
+                onHighlightUpdate={handleHighlightUpdate}
+                onPostItClick={handlePostItClick}
+                onPostItDelete={handlePostItDelete}
+                paperTitle={paper.title}
+              />
+            )}
+            
+            {sidebarTab === 'ai' && (
+              <div className="h-full overflow-y-auto p-4">
+                <AISummary paper={paper} />
+              </div>
+            )}
+            
+            {sidebarTab === 'related' && (
+              <div className="h-full overflow-y-auto">
+                <RelatedWorkFinder 
+                  currentPaper={paper}
+                  onImport={onImportPaper || (() => {})}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
