@@ -1,24 +1,25 @@
-// src/components/RelatedWorkFinder.tsx
 import React, { useState, useEffect } from 'react';
 import { fetchCitationData, fetchRecommendedPapers, fetchCitationsWithMetadata } from '../utils/semanticScholar';
 import type { Paper } from '../types';
 import { Loader2, ExternalLink, Plus, RefreshCw, Sparkles, Library } from 'lucide-react';
 
 interface Props {
-  currentPaper: Paper;
-  onImport: (paper: Partial<Paper>) => void;
+  paper: Paper;
+  papers: Paper[];
+  onImportPaper?: (paper: Partial<Paper>) => void;
 }
 
-export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
+export function RelatedWorkFinder({ paper, papers = [], onImportPaper }: Props) {
   const [related, setRelated] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<'citedby' | 'recommended'>('citedby');
 
   useEffect(() => {
-    if (currentPaper.semanticScholarId || currentPaper.doi) {
+    // Defensive null check and fallback to doi if semanticScholarId is not defined
+    if ((paper?.semanticScholarId || paper?.doi)) {
       loadPapers();
     }
-  }, [currentPaper, mode]);
+  }, [paper, mode]);
 
   const loadPapers = async () => {
     if (mode === 'citedby') {
@@ -30,20 +31,17 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
 
   const loadCitedBy = async () => {
     setLoading(true);
-    
-    let paperId = currentPaper.semanticScholarId;
-    if (!paperId && currentPaper.doi) {
-      const cleanDoi = currentPaper.doi.replace(/^DOI:/i, '');
+    let paperId = paper?.semanticScholarId;
+    if (!paperId && paper?.doi) {
+      const cleanDoi = paper.doi.replace(/^DOI:/i, '');
       const data = await fetchCitationData(cleanDoi);
       paperId = data?.paperId;
     }
     if (!paperId) {
-      console.error('No Semantic Scholar ID for cited-by mode');
       setRelated([]);
       setLoading(false);
       return;
     }
-    // Use 100 (API limit for citations with full metadata)
     const citationsData = await fetchCitationsWithMetadata(paperId, 100);
     let papers = citationsData.map((item: any) => {
       const cite = item.citingPaper;
@@ -65,19 +63,17 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
 
   const loadRecommendations = async () => {
     setLoading(true);
-    let paperId = currentPaper.semanticScholarId;
-    if (!paperId && currentPaper.doi) {
-      const cleanDoi = currentPaper.doi.replace(/^DOI:/i, '');
+    let paperId = paper?.semanticScholarId;
+    if (!paperId && paper?.doi) {
+      const cleanDoi = paper.doi.replace(/^DOI:/i, '');
       const data = await fetchCitationData(cleanDoi);
       paperId = data?.paperId;
     }
     if (!paperId) {
-      console.error('No Semantic Scholar ID for recommendations');
       setRelated([]);
       setLoading(false);
       return;
     }
-    // Use 500 (max limit for recommendations API)
     const recommendations = await fetchRecommendedPapers(paperId, 500, 'recent');
     let papers = recommendations.map((paper: any) => ({
       paperId: paper.paperId,
@@ -133,30 +129,32 @@ export function RelatedWorkFinder({ currentPaper, onImport }: Props) {
             {mode === 'citedby' ? 'No citing papers found.' : 'No recommendations available.'}
           </p>
         ) : (
-          related.map((paper, idx) => (
-            <div key={paper.paperId || paper.title || idx} className="border-2 border-black p-3 hover:bg-gray-50 transition-colors">
-              <h4 className="font-bold text-sm leading-tight mb-1">{paper.title}</h4>
+          related.map((p, idx) => (
+            <div key={p.paperId || p.title || idx} className="border-2 border-black p-3 hover:bg-gray-50 transition-colors">
+              <h4 className="font-bold text-sm leading-tight mb-1">{p.title}</h4>
               <div className="text-xs text-gray-600 mb-2 flex items-center justify-between">
-                <span>{paper.year}</span>
-                <span className="truncate max-w-[120px]">{paper.authors}</span>
-                <span className="ml-2 text-gray-400">{paper.citationCount || 0} cites</span>
+                <span>{p.year}</span>
+                <span className="truncate max-w-[120px]">{p.authors}</span>
+                <span className="ml-2 text-gray-400">{p.citationCount || 0} cites</span>
               </div>
               <div className="flex gap-2 mt-2">
-                <button 
-                  onClick={() => onImport({
-                    title: paper.title,
-                    authors: paper.authors,
-                    year: paper.year?.toString(),
-                    abstract: paper.abstract,
-                    venue: paper.venue,
-                    semanticScholarId: paper.paperId
-                  })}
-                  className="nb-button py-1 px-2 text-xs flex items-center gap-1 bg-nb-lime flex-1 justify-center"
-                >
-                  <Plus size={12} /> Add to Library
-                </button>
+                {onImportPaper && (
+                  <button 
+                    onClick={() => onImportPaper({
+                      title: p.title,
+                      authors: p.authors,
+                      year: p.year?.toString(),
+                      abstract: p.abstract,
+                      venue: p.venue,
+                      semanticScholarId: p.paperId
+                    })}
+                    className="nb-button py-1 px-2 text-xs flex items-center gap-1 bg-nb-lime flex-1 justify-center"
+                  >
+                    <Plus size={12} /> Add to Library
+                  </button>
+                )}
                 <a 
-                  href={`https://www.semanticscholar.org/paper/${paper.paperId}`} 
+                  href={`https://www.semanticscholar.org/paper/${p.paperId}`} 
                   target="_blank" 
                   rel="noreferrer"
                   className="nb-button py-1 px-2 text-xs bg-white"
