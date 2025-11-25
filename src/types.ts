@@ -1,7 +1,10 @@
 // Core Paper type with extended metadata
+export type ItemType = 'paper' | 'book';
+
 export interface Paper {
   id: string;
   userId: string;
+  itemType?: ItemType; // Defaults to 'paper' for backward compatibility
   title: string;
   link: string;
   tags: string[];
@@ -55,6 +58,28 @@ export interface Paper {
   pageCount?: number;
   addedDate?: number;
   modifiedDate?: number;
+  
+  // Book-specific fields
+  isbn?: string; // ISBN-10 or ISBN-13
+  isbn10?: string;
+  isbn13?: string;
+  edition?: string;
+  series?: string;
+  seriesNumber?: string;
+  chapters?: BookChapter[];
+  coverImageUrl?: string;
+  bookFormat?: 'hardcover' | 'paperback' | 'ebook' | 'audiobook';
+}
+
+export interface BookChapter {
+  id: string;
+  number: number;
+  title: string;
+  startPage?: number;
+  endPage?: number;
+  notes?: string;
+  status?: 'to-read' | 'reading' | 'read';
+  readAt?: number;
 }
 
 export interface HierarchicalTag {
@@ -70,6 +95,10 @@ export interface StructuredNotes {
   conclusions?: string;
   limitations?: string;
   futureWork?: string;
+  // Book-specific notes
+  mainThemes?: string;
+  keyTakeaways?: string;
+  criticalAnalysis?: string;
 }
 
 export interface Highlight {
@@ -114,6 +143,7 @@ export interface FilterState {
   methods: string[];
   organisms: string[];
   rating: number | null;
+  itemType?: ItemType[]; // Filter by paper or book
 }
 
 export interface CitationData {
@@ -163,4 +193,20 @@ export interface RelatedPaper {
   similarity: number; // 0-1
   sharedTags: string[];
   sharedAuthors: string[];
+}
+
+// Book metadata from external APIs
+export interface BookMetadata {
+  title: string;
+  authors: string[];
+  publisher?: string;
+  publishedDate?: string;
+  description?: string;
+  isbn10?: string;
+  isbn13?: string;
+  pageCount?: number;
+  categories?: string[];
+  language?: string;
+  coverImageUrl?: string;
+  previewLink?: string;
 }
