@@ -601,7 +601,7 @@ function App() {
     <div className="min-h-screen bg-nb-gray flex flex-col font-sans text-black">
       <SharedUI />
       <header className="bg-white border-b-4 border-black p-5 flex justify-between items-center shadow-sm sticky top-0 z-30">
-        <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1></div>
+        <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1><p className="text-sm font-bold text-gray-600 uppercase">by Maximilian Kothen</p></div>
         <div className="flex gap-4">
           <button 
             onClick={() => setActiveView('review')} 
