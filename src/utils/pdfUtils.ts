@@ -121,6 +121,14 @@ export async function extractPDFOutline(
  */
 export async function calculatePDFHash(file: File): Promise<string> {
   try {
+    // OPTIMIZATION: Skip hash calculation for files > 50MB to prevent browser crash
+    // Large files consume too much RAM when reading into ArrayBuffer
+    const MAX_HASH_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_HASH_SIZE) {
+      console.warn(`File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds hash limit. Skipping duplicate check.`);
+      return ""; 
+    }
+
     const arrayBuffer = await file.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));

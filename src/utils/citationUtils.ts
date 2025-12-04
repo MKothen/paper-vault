@@ -1,4 +1,4 @@
-import type { Paper, CitationData, BibTeXEntry } from '../types';
+import type { Paper, CitationData } from '../types';
 
 /**
  * Normalize DOI input to clean format
@@ -39,11 +39,59 @@ export function normalizeDOI(input: string): string | null {
 }
 
 /**
+ * Extract Semantic Scholar Paper ID from URL or raw hex string
+ */
+export function normalizeSemanticScholarId(input: string): string | null {
+  if (!input) return null;
+  const trimmed = input.trim();
+  
+  // Match Semantic Scholar URL (e.g., semanticscholar.org/paper/Title/ID)
+  const urlPattern = /(?:semanticscholar\.org\/paper\/)(?:.*\/)?([0-9a-fA-F]{40})/i;
+  const urlMatch = trimmed.match(urlPattern);
+  if (urlMatch) return urlMatch[1];
+  
+  // Match raw 40-character hex ID
+  const idPattern = /^([0-9a-fA-F]{40})$/i;
+  const idMatch = trimmed.match(idPattern);
+  if (idMatch) return idMatch[1];
+  
+  return null;
+}
+
+/**
+ * Extract arXiv ID from text
+ */
+export function extractArXivId(text: string): string | null {
+  const arxivPattern = /(?:arXiv:)?(\d{4}\.\d{4,5}(?:v\d+)?)/i;
+  const match = text.match(arxivPattern);
+  return match ? match[1] : null;
+}
+
+/**
+ * Auto-detect the type of identifier provided
+ */
+export function detectIdentifier(input: string): { id: string, type: 'DOI' | 'ArXiv' | 'S2' } | null {
+  // Check for Semantic Scholar ID or URL first
+  const s2 = normalizeSemanticScholarId(input);
+  if (s2) return { id: s2, type: 'S2' };
+  
+  // Check for DOI
+  const doi = normalizeDOI(input);
+  if (doi) return { id: doi, type: 'DOI' };
+  
+  // Check for ArXiv ID
+  const arxiv = extractArXivId(input);
+  if (arxiv) return { id: arxiv, type: 'ArXiv' };
+  
+  return null;
+}
+
+/**
  * Fetch citation count and related data from Semantic Scholar
  */
 export async function fetchSemanticScholarData(
   identifier: string,
-  identifierType: 'DOI' | 'ArXiv' | 'PubMed' | 'Title' = 'DOI'
+  identifierType: 'DOI' | 'ArXiv' | 'PubMed' | 'Title' | 'S2' = 'DOI'
 ): Promise<CitationData | null> {
   try {
     let url = '';
@@ -61,6 +109,9 @@ export async function fetchSemanticScholarData(
         return searchData.data[0];
       }
       return null;
+    } else if (identifierType === 'S2') {
+      // Direct Semantic Scholar ID lookup (no prefix)
+      url = `https://api.semanticscholar.org/graph/v1/paper/${identifier}?fields=${fields}`;
     } else {
       // Normalize DOI if needed
       let cleanIdentifier = identifier;
@@ -73,7 +124,7 @@ export async function fetchSemanticScholarData(
         cleanIdentifier = normalized;
       }
       
-      // Direct lookup
+      // Direct lookup for DOI, ArXiv, etc.
       url = `https://api.semanticscholar.org/graph/v1/paper/${identifierType}:${cleanIdentifier}?fields=${fields}`;
     }
 
@@ -99,9 +150,6 @@ export function parseBibTeX(bibtex: string): Partial<Paper> | null {
     // Extract entry type and citation key
     const entryMatch = bibtex.match(/@(\w+)\{([^,]+),/);
     if (!entryMatch) return null;
-
-    const entryType = entryMatch[1].toLowerCase();
-    const citationKey = entryMatch[2].trim();
 
     // Extract fields
     const fields: Record<string, string> = {};
@@ -219,15 +267,6 @@ export function formatCitation(
  */
 export function extractDOI(text: string): string | null {
   return normalizeDOI(text);
-}
-
-/**
- * Extract arXiv ID from text
- */
-export function extractArXivId(text: string): string | null {
-  const arxivPattern = /(?:arXiv:)?(\d{4}\.\d{4,5}(?:v\d+)?)/i;
-  const match = text.match(arxivPattern);
-  return match ? match[1] : null;
 }
 
 /**

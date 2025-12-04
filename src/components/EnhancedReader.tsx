@@ -3,7 +3,7 @@ import { Document, Page } from 'react-pdf';
 import type { Paper, Highlight, PostIt } from '../types';
 import { 
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Highlighter, StickyNote, 
-  X, Book, List, Search, Download, FileText, Wand2, Network 
+  X, Book, List, Search, Wand2, Network, MousePointer2, FileText
 } from 'lucide-react';
 import { TableOfContents } from './TableOfContents';
 import { FullTextSearch } from './FullTextSearch';
@@ -21,8 +21,7 @@ import {
   saveHighlights,
   savePostIts,
   loadHighlights,
-  loadPostIts,
-  getCategoryColor
+  loadPostIts
 } from '../utils/highlightUtils';
 
 interface Props {
@@ -185,7 +184,68 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
   const goToNextPage = () => setPageNumber(p => Math.min(numPages, p + 1));
 
   return (
-    <div className="flex h-full bg-gray-100">
+    <div className="flex h-full bg-gray-100 relative">
+      
+      {/* --- NEW: Floating Mode Switcher --- */}
+      <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex items-center justify-center">
+        <div className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-2 rounded-full flex items-center gap-2 transition-transform hover:-translate-y-1">
+          <button
+            onClick={() => setMode('read')}
+            className={`p-3 rounded-full border-2 transition-all ${
+              mode === 'read' 
+                ? 'bg-black text-white border-black' 
+                : 'bg-white text-gray-700 border-transparent hover:bg-gray-100'
+            }`}
+            title="Read Mode"
+          >
+            <Book size={20} strokeWidth={2.5} />
+          </button>
+          
+          <button
+            onClick={() => setMode('highlight')}
+            className={`p-3 rounded-full border-2 transition-all ${
+              mode === 'highlight' 
+                ? 'bg-nb-yellow text-black border-black' 
+                : 'bg-white text-gray-700 border-transparent hover:bg-gray-100'
+            }`}
+            title="Highlight Mode"
+          >
+            <Highlighter size={20} strokeWidth={2.5} />
+          </button>
+          
+          <button
+            onClick={() => setMode('note')}
+            className={`p-3 rounded-full border-2 transition-all ${
+              mode === 'note' 
+                ? 'bg-nb-pink text-black border-black' 
+                : 'bg-white text-gray-700 border-transparent hover:bg-gray-100'
+            }`}
+            title="Add Sticky Note"
+          >
+            <StickyNote size={20} strokeWidth={2.5} />
+          </button>
+
+          {/* Inline Category Selector when Highlighting */}
+          {mode === 'highlight' && (
+            <div className="animate-in fade-in slide-in-from-left-4 duration-300 flex items-center border-l-2 border-gray-200 pl-2 ml-1">
+               <select 
+                value={activeCategory} 
+                onChange={e => setActiveCategory(e.target.value as Highlight['category'])} 
+                className="text-xs font-bold border-2 border-black p-2 rounded cursor-pointer bg-white focus:outline-none focus:ring-2 focus:ring-nb-yellow"
+              >
+                <option value="general">🟡 General</option>
+                <option value="methodology">🔵 Methods</option>
+                <option value="results">🟢 Results</option>
+                <option value="related-work">🟣 Related</option>
+                <option value="discussion">🟠 Discuss</option>
+                <option value="limitation">🔴 Limits</option>
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* ---------------------------------- */}
+
       {/* Main Reader */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
@@ -198,51 +258,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               {paper.title}
             </span>
           </div>
-          {/* Mode selector */}
-          <div className="flex items-center gap-2 bg-gray-100 p-1 rounded border-2 border-black">
-            <button 
-              onClick={() => setMode('read')} 
-              className={`p-2 rounded transition-colors ${
-                mode === 'read' ? 'bg-black text-white' : 'hover:bg-white'
-              }`} 
-              title="Read Mode"
-            >
-              <Book size={18}/>
-            </button>
-            <button 
-              onClick={() => setMode('highlight')} 
-              className={`p-2 rounded transition-colors ${
-                mode === 'highlight' ? 'bg-black text-white' : 'hover:bg-white'
-              }`} 
-              title="Highlight Mode"
-            >
-              <Highlighter size={18}/>
-            </button>
-            <button 
-              onClick={() => setMode('note')} 
-              className={`p-2 rounded transition-colors ${
-                mode === 'note' ? 'bg-black text-white' : 'hover:bg-white'
-              }`} 
-              title="Add Sticky Note"
-            >
-              <StickyNote size={18}/>
-            </button>
-            {/* Category selector for highlight mode */}
-            {mode === 'highlight' && (
-              <select 
-                value={activeCategory} 
-                onChange={e => setActiveCategory(e.target.value as Highlight['category'])} 
-                className="text-xs border-black border ml-2 p-1"
-              >
-                <option value="general">General</option>
-                <option value="methodology">Methodology</option>
-                <option value="results">Results</option>
-                <option value="related-work">Related Work</option>
-                <option value="discussion">Discussion</option>
-                <option value="limitation">Limitation</option>
-              </select>
-            )}
-          </div>
+          
           {/* Zoom and sidebar controls */}
           <div className="flex items-center gap-2">
             <button onClick={zoomOut} className="nb-button p-1" disabled={scale <= 0.5}>
@@ -273,7 +289,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
         </div>
         {/* PDF Canvas / Upload PDF UI */}
         <div 
-          className="flex-1 overflow-auto p-8 flex justify-center" 
+          className="flex-1 overflow-auto p-8 flex justify-center pb-24" // Added padding-bottom to avoid overlap with floating tool
           onClick={handleCanvasClick}
           style={{ cursor: mode === 'note' ? 'crosshair' : 'default' }}
         >
@@ -352,7 +368,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
         </div>
         {/* Footer Pagination (unchanged) */}
         {paper.pdfUrl && (
-          <div className="bg-white border-t-4 border-black p-2 flex justify-center items-center gap-4">
+          <div className="bg-white border-t-4 border-black p-2 flex justify-center items-center gap-4 z-40">
             <button 
               onClick={goToPreviousPage} 
               disabled={pageNumber <= 1} 
@@ -386,7 +402,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
           </div>
         )}
       </div>
-      {/* Right Sidebar -- REPAIRED: sidebar switch logic to show content */}
+      {/* Right Sidebar */}
       {showSidebar && (
         <div className="w-96 bg-white border-l-4 border-black flex flex-col">
           <div className="flex border-b-4 border-black">
@@ -454,10 +470,30 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
                 paperTitle={paper.title}
               />
             )}
-            {/* Additional sidebar logic for other tabs as needed */}
-            {sidebarTab === 'toc' && <TableOfContents tocItems={tocItems} onNavigate={setPageNumber} />}
+            {sidebarTab === 'toc' && <TableOfContents items={tocItems} currentPage={pageNumber} onPageClick={setPageNumber} />}
             {sidebarTab === 'notes' && (
-              <div className="p-6 text-gray-500">Notes tab content placeholder</div>
+              <div className="p-4 space-y-4 overflow-y-auto h-full">
+                <h3 className="font-black uppercase mb-2">Structured Notes</h3>
+                {['Research Question', 'Methods', 'Results', 'Conclusions', 'Limitations', 'Future Work'].map(section => (
+                  <div key={section}>
+                    <label className="text-xs font-bold uppercase block mb-1">{section}</label>
+                    <textarea 
+                      className="nb-input text-sm w-full border-2 border-black p-2 min-h-[100px] resize-y"
+                      placeholder={`Enter ${section}...`}
+                      value={(paper.structuredNotes as any)?.[section.toLowerCase().replace(' ', '')] || ''}
+                      onChange={e => {
+                          const key = section.toLowerCase().replace(' ', '');
+                          onUpdate({ 
+                            structuredNotes: { 
+                              ...(paper.structuredNotes || {}), 
+                              [key]: e.target.value 
+                            } 
+                          });
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             )}
             {sidebarTab === 'ai' && (
               <AISummary paper={paper} />

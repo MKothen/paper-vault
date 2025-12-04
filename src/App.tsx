@@ -21,7 +21,14 @@ import 'react-pdf/dist/Page/TextLayer.css';
 
 // --- UTILITY IMPORTS ---
 import { generatePDFThumbnail, extractPDFText, findDuplicatePapers, calculatePDFHash } from './utils/pdfUtils';
-import { fetchSemanticScholarData, parseBibTeX, generateBibTeX, formatCitation, normalizeDOI } from './utils/citationUtils';
+import { 
+  fetchSemanticScholarData, 
+  parseBibTeX, 
+  generateBibTeX, 
+  formatCitation, 
+  normalizeDOI, 
+  detectIdentifier 
+} from './utils/citationUtils';
 import { calculateReadingStats, formatReadingTime, getTopItems } from './utils/analyticsUtils';
 import { sm2Review, initializeSRS, getDuePapers } from './utils/srs';
 
@@ -243,28 +250,28 @@ function App() {
     }
   };
 
-  // Handler for DOI auto-fill functionality
+  // Handler for Auto-fill functionality (DOI, S2 URL, ArXiv)
   const handleDOIAutoFill = async () => {
     if (!doiInput.trim()) {
-      addToast("Please enter a DOI", "error");
+      addToast("Please enter a DOI, URL, or ID", "error");
       return;
     }
 
     setIsFetching(true);
     try {
-      // Normalize the DOI input (handles all formats)
-      const cleanDoi = normalizeDOI(doiInput);
+      // Auto-detect the type of identifier
+      const detected = detectIdentifier(doiInput);
       
-      if (!cleanDoi) {
-        addToast("Invalid DOI format. Use formats like: 10.xxxx/xxxx or https://doi.org/10.xxxx/xxxx", "error");
+      if (!detected) {
+        addToast("Invalid format. Try a DOI, Semantic Scholar URL, or ArXiv ID.", "error");
         setIsFetching(false);
         return;
       }
 
-      addToast(`Fetching metadata for DOI: ${cleanDoi}...`, "info");
+      addToast(`Fetching metadata for ${detected.type}...`, "info");
       
       // Fetch metadata from Semantic Scholar
-      const citationData = await fetchSemanticScholarData(cleanDoi, 'DOI');
+      const citationData = await fetchSemanticScholarData(detected.id, detected.type);
       
       if (citationData && !citationData.error) {
         // Extract authors
@@ -289,13 +296,13 @@ function App() {
           abstract: citationData.abstract || "",
           year: yearString || new Date().getFullYear().toString(),
           venue: citationData.venue || "",
-          doi: cleanDoi,
+          doi: citationData.externalIds?.DOI || (detected.type === 'DOI' ? detected.id : ""),
           citationCount: citationData.citationCount || 0,
           semanticScholarId: citationData.paperId,
           tags: generateSmartTags(citationData.title + " " + (citationData.abstract || "")),
           color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
           status: "to-read",
-          link: `https://doi.org/${cleanDoi}`,
+          link: citationData.externalIds?.DOI ? `https://doi.org/${citationData.externalIds.DOI}` : "",
           notes: "",
           pdfUrl: "",
           thumbnailUrl: "",
@@ -308,13 +315,13 @@ function App() {
           structuredNotes: {}
         });
         
-        addToast("Paper added successfully with full metadata!", "success");
+        addToast("Paper added successfully!", "success");
         setDoiInput(""); // Clear the input
       } else {
-        addToast("Could not fetch metadata for this DOI. Please check the DOI or try manual entry.", "error");
+        addToast("Could not find paper metadata. Please check your input.", "error");
       }
     } catch (error) {
-      console.error('Error fetching DOI metadata:', error);
+      console.error('Error fetching metadata:', error);
       addToast("Error fetching metadata. Please try again.", "error");
     }
     
@@ -601,7 +608,7 @@ function App() {
     <div className="min-h-screen bg-nb-gray flex flex-col font-sans text-black">
       <SharedUI />
       <header className="bg-white border-b-4 border-black p-5 flex justify-between items-center shadow-sm sticky top-0 z-30">
-        <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1></div>
+        <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1><p className="text-sm font-bold text-gray-600 uppercase">by Maximilian Kothen</p></div>
         <div className="flex gap-4">
           <button 
             onClick={() => setActiveView('review')} 
@@ -648,7 +655,7 @@ function App() {
          ) : (
             <div className="bg-nb-gray p-4 border-4 border-black">
                <p className="text-xs font-bold text-gray-600 mb-2 uppercase">
-                  Supports: 10.xxxx/xxxx | https://doi.org/10.xxxx/xxxx | https://www.doi.org/10.xxxx/xxxx
+                  Supports: DOI, Semantic Scholar URL, Paper ID, or ArXiv ID
                </p>
                <div className="flex gap-2">
                   <input 
@@ -656,7 +663,7 @@ function App() {
                     onChange={e => setDoiInput(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleDOIAutoFill(); }}
                     className="nb-input flex-1" 
-                    placeholder="Paste DOI here..." 
+                    placeholder="Paste DOI/URL here..." 
                     disabled={isFetching}
                   />
                   <button 
