@@ -68,7 +68,7 @@ export function createHighlightFromSelection(
   if (rects.length === 0) return null;
   
   return {
-    id: Date.now(),
+    id: Date.now().toString(), // Ensure ID is string for consistency
     page: pageNumber,
     rects,
     color: getCategoryColor(category),
@@ -78,45 +78,69 @@ export function createHighlightFromSelection(
   };
 }
 
+// --- MIGRATION & LOCAL STORAGE UTILITIES ---
+
 /**
- * Persists highlights to localStorage
+ * Persists highlights to localStorage (Legacy/Backup)
  */
-export function saveHighlights(paperId: string, highlights: Highlight[]): void {
+export function saveLocalHighlights(paperId: string, highlights: Highlight[]): void {
   localStorage.setItem(`highlights-${paperId}`, JSON.stringify(highlights));
 }
 
 /**
- * Loads highlights from localStorage
+ * Loads highlights from localStorage (For migration)
  */
-export function loadHighlights(paperId: string): Highlight[] {
+export function loadLocalHighlights(paperId: string): Highlight[] {
   try {
     const data = localStorage.getItem(`highlights-${paperId}`);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error loading highlights:', error);
+    console.error('Error loading local highlights:', error);
     return [];
   }
 }
 
 /**
- * Persists post-its to localStorage
+ * Removes highlights from localStorage after successful migration
  */
-export function savePostIts(paperId: string, postits: PostIt[]): void {
+export function clearLocalHighlights(paperId: string): void {
+  localStorage.removeItem(`highlights-${paperId}`);
+}
+
+/**
+ * Persists post-its to localStorage (Legacy/Backup)
+ */
+export function saveLocalPostIts(paperId: string, postits: PostIt[]): void {
   localStorage.setItem(`postits-${paperId}`, JSON.stringify(postits));
 }
 
 /**
- * Loads post-its from localStorage
+ * Loads post-its from localStorage (For migration)
  */
-export function loadPostIts(paperId: string): PostIt[] {
+export function loadLocalPostIts(paperId: string): PostIt[] {
   try {
     const data = localStorage.getItem(`postits-${paperId}`);
     return data ? JSON.parse(data) : [];
   } catch (error) {
-    console.error('Error loading post-its:', error);
+    console.error('Error loading local post-its:', error);
     return [];
   }
 }
+
+/**
+ * Removes post-its from localStorage after successful migration
+ */
+export function clearLocalPostIts(paperId: string): void {
+  localStorage.removeItem(`postits-${paperId}`);
+}
+
+// Legacy exports for backward compatibility during refactor
+export const saveHighlights = saveLocalHighlights;
+export const loadHighlights = loadLocalHighlights;
+export const savePostIts = saveLocalPostIts;
+export const loadPostIts = loadLocalPostIts;
+
+// --- EXPORT UTILITIES ---
 
 /**
  * Exports highlights to markdown format
@@ -227,7 +251,7 @@ export function createPostIt(
   color: PostIt['color'] = { name: 'yellow', class: 'bg-yellow-200', hex: '#fef08a' }
 ): PostIt {
   return {
-    id: Date.now(),
+    id: Date.now().toString(), // Ensure ID is string
     page: pageNumber,
     x: x / scale,
     y: y / scale,

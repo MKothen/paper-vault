@@ -10,7 +10,7 @@ import {
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
   Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
   Info, LayoutGrid, BarChart3, Download, FileText, Users, ChevronRight,
-  Brain, RefreshCw
+  Brain, RefreshCw, Calendar, Upload
 } from 'lucide-react';
 import ForceGraph2D from 'react-force-graph-2d';
 
@@ -42,6 +42,7 @@ import { TOCSidebar } from './components/TOCSidebar';
 import { EnhancedMetadataModal } from './components/EnhancedMetadataModal';
 import { EnhancedReader } from './components/EnhancedReader';
 import { ReviewQueue } from './components/ReviewQueue';
+import { MultiFilterSidebar } from './components/MultiFilterSidebar'; // Added MultiFilterSidebar import
 
 // Configure Worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -84,7 +85,24 @@ function App() {
   const [selectedPaper, setSelectedPaper] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   
-  // Input Mode State
+  // Filter State
+  const [filters, setFilters] = useState({
+    searchTerm: '',
+    tags: [],
+    yearRange: [2000, new Date().getFullYear()],
+    venues: [],
+    authors: [],
+    status: [],
+    colors: [],
+    methods: [],
+    organisms: [],
+    rating: null,
+    readingLists: []
+  });
+
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Input Mode State - added 'plan'
   const [inputMode, setInputMode] = useState('drop'); 
   const [isDraggingFile, setIsDraggingFile] = useState(false);
 
@@ -92,6 +110,7 @@ function App() {
   const [showMetadataModal, setShowMetadataModal] = useState(false);
   const [editingPaper, setEditingPaper] = useState(null);
   const fileInputRef = useRef(null);
+  const planInputRef = useRef(null); // Ref for JSON plan upload
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(""); 
   const [doiInput, setDoiInput] = useState("");
@@ -134,6 +153,32 @@ function App() {
 
   // Calculate due papers for review
   const duePapers = useMemo(() => getDuePapers(papers), [papers]);
+
+  // Apply filters
+  const filteredPapers = useMemo(() => {
+    return papers.filter(p => {
+      // Search Term Filter
+      const q = searchTerm.toLowerCase();
+      if (q && !(
+        p.title.toLowerCase().includes(q) || 
+        p.tags?.some(t => t.toLowerCase().includes(q)) ||
+        p.authors?.toLowerCase().includes(q)
+      )) {
+        return false;
+      }
+
+      // Reading List Filter (from Filters object)
+      if (filters.readingLists.length > 0 && (!p.readingList || !filters.readingLists.includes(p.readingList))) {
+        return false;
+      }
+
+      // Other filters (Tags, Year, etc.) from MultiFilterSidebar would go here
+      // ...
+
+      return true;
+    });
+  }, [papers, searchTerm, filters]);
+
 
   const extractMetadata = async (file) => {
       const arrayBuffer = await file.arrayBuffer();
@@ -248,6 +293,73 @@ function App() {
       for(let i=0; i<e.target.files.length; i++) await processFile(e.target.files[i]); 
       setIsUploading(false); 
     }
+  };
+
+  // Handler for Plan Upload (JSON)
+  const handlePlanUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const json = JSON.parse(event.target.result);
+        const items = Array.isArray(json) ? json : json.items || [];
+        
+        // Detect Plan Name: Use JSON 'title' or fallback to Filename
+        const planName = (!Array.isArray(json) && json.title) 
+          ? json.title 
+          : file.name.replace(/\.[^/.]+$/, ""); // remove .json extension
+        
+        let createdCount = 0;
+        let updatedCount = 0;
+
+        for (const item of items) {
+          if (!item.title) continue;
+
+          const existingPaper = papers.find(p => p.title.toLowerCase().trim() === item.title.toLowerCase().trim());
+
+          if (existingPaper) {
+            // Update existing paper with date AND reading list
+            await updateDoc(doc(db, "papers", existingPaper.id), {
+              scheduledDate: item.date || item.scheduledDate,
+              readingList: planName, // <--- Assign to group
+              modifiedDate: Date.now()
+            });
+            updatedCount++;
+          } else {
+            // Create new paper with reading list
+            await addDoc(collection(db, "papers"), {
+              userId: user.uid,
+              title: item.title,
+              scheduledDate: item.date || item.scheduledDate,
+              readingList: planName, // <--- Assign to group
+              notes: item.notes || "",
+              status: "to-read",
+              color: COLORS[0].class,
+              tags: ["Planned"],
+              authors: "Unknown",
+              createdAt: Date.now(),
+              addedDate: Date.now(),
+              rating: 0,
+              methods: [],
+              organisms: [],
+              hypotheses: [],
+              structuredNotes: {}
+            });
+            createdCount++;
+          }
+        }
+        
+        addToast(`Imported "${planName}": ${createdCount} new, ${updatedCount} updated`, "success");
+        setInputMode('drop'); 
+        
+      } catch (err) {
+        console.error("JSON parse error", err);
+        addToast("Invalid JSON file", "error");
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Handler for Auto-fill functionality (DOI, S2 URL, ArXiv)
@@ -412,19 +524,6 @@ function App() {
     setActiveView('reader');
   };
 
-  const allUniqueTags = useMemo(() => {
-    const tags = new Set();
-    papers.forEach(p => p.tags?.forEach(t => tags.add(t)));
-    return Array.from(tags).sort();
-  }, [papers]);
-
-  const filteredPapers = papers.filter(p => {
-    const q = searchTerm.toLowerCase();
-    return p.title.toLowerCase().includes(q) || 
-           p.tags?.some(t => t.toLowerCase().includes(q)) ||
-           p.authors?.toLowerCase().includes(q);
-  });
-
   // Handler for clicking on tags - navigates back to library with filter
   const handleTagClick = (tag) => {
     setSearchTerm(tag);
@@ -493,7 +592,7 @@ function App() {
       {showMetadataModal && editingPaper && (
         <EnhancedMetadataModal
           paper={editingPaper}
-          allTags={allUniqueTags}
+          allTags={Array.from(new Set(papers.flatMap(p => p.tags || [])))}
           onClose={() => {
             setShowMetadataModal(false);
             setEditingPaper(null);
@@ -631,6 +730,7 @@ function App() {
             <div className="flex items-center gap-4">
                <button onClick={() => setInputMode('drop')} className={`text-sm font-black uppercase border-b-4 pb-1 ${inputMode === 'drop' ? 'border-nb-purple' : 'border-transparent'}`}>Smart Drop</button>
                <button onClick={() => setInputMode('manual')} className={`text-sm font-black uppercase border-b-4 pb-1 ${inputMode === 'manual' ? 'border-nb-lime' : 'border-transparent'}`}>Manual Entry</button>
+               <button onClick={() => setInputMode('plan')} className={`text-sm font-black uppercase border-b-4 pb-1 ${inputMode === 'plan' ? 'border-nb-cyan' : 'border-transparent'}`}>Upload Plan</button>
             </div>
             <div className="relative w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={3} size={16} />
@@ -638,7 +738,7 @@ function App() {
             </div>
          </div>
 
-         {inputMode === 'drop' ? (
+         {inputMode === 'drop' && (
             <div 
               onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
               onDragLeave={() => setIsDraggingFile(false)}
@@ -652,7 +752,9 @@ function App() {
                </div>
                <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" multiple onChange={handleFileSelect} />
             </div>
-         ) : (
+         )}
+         
+         {inputMode === 'manual' && (
             <div className="bg-nb-gray p-4 border-4 border-black">
                <p className="text-xs font-bold text-gray-600 mb-2 uppercase">
                   Supports: DOI, Semantic Scholar URL, Paper ID, or ArXiv ID
@@ -677,19 +779,54 @@ function App() {
                </div>
             </div>
          )}
+
+         {inputMode === 'plan' && (
+            <div 
+              onClick={() => planInputRef.current?.click()}
+              className="border-4 border-dashed border-nb-cyan bg-cyan-50 h-32 flex flex-col items-center justify-center cursor-pointer"
+            >
+               <div className="text-center">
+                  <p className="font-black text-xl uppercase flex items-center gap-2 justify-center">
+                    <Upload size={24}/> Upload Reading Plan (JSON)
+                  </p>
+                  <p className="text-sm text-gray-500">Auto-create papers from list with due dates & groups</p>
+               </div>
+               <input ref={planInputRef} type="file" accept=".json" className="hidden" onChange={handlePlanUpload} />
+            </div>
+         )}
       </div>
 
-      <VirtualKanbanBoard 
-        papers={filteredPapers} 
-        onStatusChange={handleStatusChange}
-        onRead={handleRead}
-        onEdit={(p) => { 
-          setEditingPaper(p); 
-          setShowMetadataModal(true); 
-        }}
-        onDelete={deletePaper}
-        onUploadPdf={handleUploadPdf}
-      />
+      <div className="flex flex-1 overflow-hidden">
+        {/* Kanban Board Area */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <VirtualKanbanBoard 
+            papers={filteredPapers} 
+            onStatusChange={handleStatusChange}
+            onRead={handleRead}
+            onEdit={(p) => { 
+              setEditingPaper(p); 
+              setShowMetadataModal(true); 
+            }}
+            onDelete={deletePaper}
+            onUploadPdf={handleUploadPdf}
+          />
+        </div>
+
+        {/* Right Sidebar Toggle */}
+        <div className="border-l-4 border-black bg-white flex flex-col items-center py-4 w-12 hover:w-14 transition-all cursor-pointer" onClick={() => setShowFilters(!showFilters)}>
+           <div className="vertical-text font-black uppercase tracking-widest text-xs transform -rotate-90 whitespace-nowrap mt-8">Filters & Groups</div>
+        </div>
+
+        {/* Filter Sidebar (Conditional) */}
+        {showFilters && (
+          <MultiFilterSidebar 
+            filters={filters}
+            setFilters={setFilters}
+            papers={papers}
+            onClose={() => setShowFilters(false)}
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from "react";
 import type { Paper } from "../types";
-import { Eye, Trash2, Pencil, Star, FileUp } from "lucide-react";
+import { Eye, Trash2, Pencil, Star, FileUp, Calendar } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 interface Props {
@@ -14,6 +14,10 @@ interface Props {
 
 const PaperCard = ({ paper, onRead, onEdit, onDelete, onUploadPdf }: any) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Calculate if due date is passed
+  const isOverdue = paper.scheduledDate && new Date(paper.scheduledDate) < new Date() && paper.status !== 'read';
+  
   return (
     <div className={`nb-card p-3 h-full flex flex-col ${paper.color || "bg-white"} transition-transform hover:scale-[1.02]`}>
       <div className="flex justify-between items-start mb-1">
@@ -24,7 +28,16 @@ const PaperCard = ({ paper, onRead, onEdit, onDelete, onUploadPdf }: any) => {
           </div>
         )}
       </div>
-      <p className="text-xs truncate font-mono mb-2 text-gray-600">{paper.authors}</p>
+      <p className="text-xs font-mono mb-2 text-gray-600 line-clamp-3 leading-tight">{paper.authors}</p>
+      
+      {/* Scheduled Date Display */}
+      {paper.scheduledDate && (
+        <div className={`flex items-center gap-1 text-[10px] font-bold mb-2 ${isOverdue ? 'text-red-600' : 'text-blue-600'}`}>
+          <Calendar size={12} />
+          <span>{isOverdue ? 'Overdue: ' : 'Plan: '}{paper.scheduledDate}</span>
+        </div>
+      )}
+
       <div className="flex gap-1 flex-wrap mb-auto">
         {paper.tags?.slice(0, 2).map((t: string) => (
           <span key={t} className="text-[10px] border border-black px-1 bg-white/80">{t}</span>

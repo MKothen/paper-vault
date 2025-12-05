@@ -1,9 +1,10 @@
+// src/components/EnhancedReader.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { Document, Page } from 'react-pdf';
 import type { Paper, Highlight, PostIt } from '../types';
 import { 
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Highlighter, StickyNote, 
-  X, Book, List, Search, Wand2, Network, MousePointer2, FileText
+  X, Book, List, Wand2, Network, FileText, Cloud
 } from 'lucide-react';
 import { TableOfContents } from './TableOfContents';
 import { FullTextSearch } from './FullTextSearch';
@@ -18,10 +19,11 @@ import { storage } from '../firebase';
 import {
   createHighlightFromSelection,
   createPostIt,
-  saveHighlights,
-  savePostIts,
-  loadHighlights,
-  loadPostIts
+  loadLocalHighlights,
+  loadLocalPostIts,
+  clearLocalHighlights,
+  clearLocalPostIts,
+  getCategoryColor
 } from '../utils/highlightUtils';
 
 interface Props {
@@ -35,16 +37,92 @@ interface Props {
 type Mode = 'read' | 'highlight' | 'note';
 type SidebarTab = 'toc' | 'notes' | 'annotations' | 'ai' | 'related';
 
+// Simple debounce hook to prevent excessive writes
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
 export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper }: Props) {
   // PDF state
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.2);
   const [uploading, setUploading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'migrating'>('saved');
 
-  // Annotation state
-  const [highlights, setHighlights] = useState<Highlight[]>(() => loadHighlights(paper.id));
-  const [postits, setPostits] = useState<PostIt[]>(() => loadPostIts(paper.id));
+  // Annotation state - Initialize from Server OR Local Storage (Migration)
+  const [highlights, setHighlights] = useState<Highlight[]>(() => {
+    // Priority 1: Server data
+    if (paper.highlights && paper.highlights.length > 0) return paper.highlights;
+    // Priority 2: Local data (Migration)
+    return loadLocalHighlights(paper.id);
+  });
+
+  const [postits, setPostits] = useState<PostIt[]>(() => {
+    // Priority 1: Server data
+    if (paper.postits && paper.postits.length > 0) return paper.postits;
+    // Priority 2: Local data (Migration)
+    return loadLocalPostIts(paper.id);
+  });
+  
+  // Debounce values to prevent excessive Firebase writes
+  const debouncedHighlights = useDebounce(highlights, 2000);
+  const debouncedPostits = useDebounce(postits, 2000);
+
+  // MIGRATION EFFECT: Check if we have local data but no server data, then save immediately
+  useEffect(() => {
+    const localH = loadLocalHighlights(paper.id);
+    const localP = loadLocalPostIts(paper.id);
+    const hasLocalData = localH.length > 0 || localP.length > 0;
+    const hasServerData = (paper.highlights?.length || 0) > 0 || (paper.postits?.length || 0) > 0;
+
+    if (hasLocalData && !hasServerData) {
+      console.log("Migrating local annotations to server...");
+      setSaveStatus('migrating');
+      onUpdate({ 
+        highlights: localH, 
+        postits: localP 
+      });
+      // Clear local storage after migration push
+      clearLocalHighlights(paper.id);
+      clearLocalPostIts(paper.id);
+      setSaveStatus('saved');
+    }
+  }, []); // Run once on mount
+
+  // SYNC EFFECT: Save to Firebase when debounced values change
+  useEffect(() => {
+    // Don't save if nothing changed or if it matches initial server data
+    // (Simple referential check + length check optimization)
+    const serverHighlights = paper.highlights || [];
+    const serverPostits = paper.postits || [];
+    
+    // If local state is different from props (server state), we need to save
+    // Note: This is a simplification. In a real app, deep comparison or dirty flags are better.
+    // Here we rely on the fact that 'highlights' state changes imply a user action.
+    const isHighlightsDirty = JSON.stringify(debouncedHighlights) !== JSON.stringify(serverHighlights);
+    const isPostitsDirty = JSON.stringify(debouncedPostits) !== JSON.stringify(serverPostits);
+
+    if (!isHighlightsDirty && !isPostitsDirty) return;
+
+    const saveToServer = async () => {
+      setSaveStatus('saving');
+      await onUpdate({
+        highlights: debouncedHighlights,
+        postits: debouncedPostits
+      });
+      setSaveStatus('saved');
+    };
+
+    saveToServer();
+  }, [debouncedHighlights, debouncedPostits, paper.highlights, paper.postits, onUpdate]);
   
   // PDF data
   const [tocItems, setTocItems] = useState<any[]>([]);
@@ -83,12 +161,6 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
       console.error('Error loading PDF data:', error);
     }
   };
-
-  // Persist annotations
-  useEffect(() => {
-    saveHighlights(paper.id, highlights);
-    savePostIts(paper.id, postits);
-  }, [highlights, postits, paper.id]);
 
   // Text selection handler for highlighting
   const handleMouseUp = () => {
@@ -186,7 +258,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
   return (
     <div className="flex h-full bg-gray-100 relative">
       
-      {/* --- NEW: Floating Mode Switcher --- */}
+      {/* --- Floating Mode Switcher --- */}
       <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 flex items-center justify-center">
         <div className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-2 rounded-full flex items-center gap-2 transition-transform hover:-translate-y-1">
           <button
@@ -233,18 +305,17 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
                 onChange={e => setActiveCategory(e.target.value as Highlight['category'])} 
                 className="text-xs font-bold border-2 border-black p-2 rounded cursor-pointer bg-white focus:outline-none focus:ring-2 focus:ring-nb-yellow"
               >
-                <option value="general">🟡 General</option>
-                <option value="methodology">🔵 Methods</option>
-                <option value="results">🟢 Results</option>
-                <option value="related-work">🟣 Related</option>
-                <option value="discussion">🟠 Discuss</option>
-                <option value="limitation">🔴 Limits</option>
+                <option value="general">General</option>
+                <option value="methodology">Methods</option>
+                <option value="results">Results</option>
+                <option value="related-work">Related</option>
+                <option value="discussion">Discuss</option>
+                <option value="limitation">Limits</option>
               </select>
             </div>
           )}
         </div>
       </div>
-      {/* ---------------------------------- */}
 
       {/* Main Reader */}
       <div className="flex-1 flex flex-col">
@@ -257,6 +328,12 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             <span className="font-black uppercase truncate max-w-xs text-sm">
               {paper.title}
             </span>
+            {/* Sync Status Indicator */}
+            <div className="flex items-center gap-1 ml-4 text-xs font-mono">
+              {saveStatus === 'saving' && <span className="text-nb-purple animate-pulse">Syncing...</span>}
+              {saveStatus === 'migrating' && <span className="text-nb-orange animate-pulse">Migrating...</span>}
+              {saveStatus === 'saved' && <span className="text-green-600 flex items-center gap-1"><Cloud size={12}/> Saved</span>}
+            </div>
           </div>
           
           {/* Zoom and sidebar controls */}
@@ -289,7 +366,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
         </div>
         {/* PDF Canvas / Upload PDF UI */}
         <div 
-          className="flex-1 overflow-auto p-8 flex justify-center pb-24" // Added padding-bottom to avoid overlap with floating tool
+          className="flex-1 overflow-auto p-8 flex justify-center pb-24"
           onClick={handleCanvasClick}
           style={{ cursor: mode === 'note' ? 'crosshair' : 'default' }}
         >
@@ -339,7 +416,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               <Document 
                 file={paper.pdfUrl} 
                 onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-                onItemClick={({ pageNumber }) => setPageNumber(pageNumber)} // handle internal PDF links
+                onItemClick={({ pageNumber }) => setPageNumber(pageNumber)}
               >
                 <Page 
                   pageNumber={pageNumber} 
@@ -366,7 +443,7 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             </div>
           )}
         </div>
-        {/* Footer Pagination (unchanged) */}
+        {/* Footer Pagination */}
         {paper.pdfUrl && (
           <div className="bg-white border-t-4 border-black p-2 flex justify-center items-center gap-4 z-40">
             <button 
