@@ -265,11 +265,29 @@ function App() {
       try { if (typeof generatePDFThumbnail === 'function') thumbnailUrl = await generatePDFThumbnail(url); } catch (e) {}
       
       await addDoc(collection(db, "papers"), {
-        userId: user.uid, title: metadata.title, link: "", tags: metadata.tags, color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
-        status: "to-read", abstract: metadata.abstract, authors: metadata.authors, year: metadata.year, venue: metadata.venue,
-        notes: "", pdfUrl: url, doi: metadata.doi || "", citationCount: metadata.citationCount || 0, pdfHash: metadata.pdfHash || "",
-        thumbnailUrl: thumbnailUrl, createdAt: Date.now(), addedDate: Date.now(),
-        rating: 0, methods: [], organisms: [], hypotheses: [], structuredNotes: {}
+        userId: user.uid,
+        title: metadata.title,
+        link: "",
+        tags: metadata.tags,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
+        status: "to-read",
+        abstract: metadata.abstract,
+        authors: metadata.authors,
+        year: metadata.year,
+        venue: metadata.venue,
+        notes: "",
+        pdfUrl: url,
+        doi: metadata.doi || "",
+        citationCount: metadata.citationCount || 0,
+        pdfHash: metadata.pdfHash || "",
+        thumbnailUrl: thumbnailUrl,
+        createdAt: Date.now(),
+        addedDate: Date.now(),
+        rating: 0,
+        methods: [],
+        organisms: [],
+        hypotheses: [],
+        structuredNotes: {}
       });
   };
 
@@ -689,11 +707,14 @@ function App() {
 
   // Use EnhancedReader for the reader view
   if (activeView === 'reader' && selectedPaper) {
+    // FIX: ensure we pass the live paper object, not the stale 'selectedPaper'
+    const livePaper = papers.find(p => p.id === selectedPaper.id) || selectedPaper;
+    
     return (
       <>
         <SharedUI />
         <EnhancedReader 
-          paper={selectedPaper} 
+          paper={livePaper} 
           onClose={() => setActiveView('library')}
           onUpdate={handlePaperUpdate}
           papers={papers}
