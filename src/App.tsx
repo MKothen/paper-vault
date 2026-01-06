@@ -88,6 +88,7 @@ function App() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [user, loading] = useAuthState(auth);
+  const { addToast } = useToast();
   
   const [papers, setPapers] = useState([]);
   const [activeView, setActiveView] = useState('library'); 
@@ -738,6 +739,7 @@ function App() {
             )}
           </button>
           <button onClick={() => setActiveView('analytics')} className="nb-button flex gap-2"><BarChart3 strokeWidth={3} /> Analytics</button>
+          <FeatureFlagMenu />
           <button onClick={logout} className="nb-button flex gap-2"><LogOut strokeWidth={3} /> Exit</button>
         </div>
       </header>

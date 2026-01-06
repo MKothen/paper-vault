@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "build-tests",
+    "allowImportingTsExtensions": false,
+    "types": ["node"],
+    "moduleResolution": "bundler"
+  },
+  "include": [
+    "src/domain/**/*",
+    "src/config/featureFlags.tsx",
+    "src/data/**/*",
+    "tests/**/*"
+  ]
+}

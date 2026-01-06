@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "npm run test:build && node --test \"build-tests/tests/**/*.js\"",
+    "test:build": "rm -rf build-tests && tsc -p tsconfig.test.json",
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
