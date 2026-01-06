@@ -1,9 +1,8 @@
 // src/App.tsx
 // @ts-nocheck
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { auth, signInWithGoogle, logout, db, storage } from './firebase';
+import { auth, signInWithGoogle, logout, storage } from './firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { collection, addDoc, query, where, onSnapshot, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
@@ -43,6 +42,9 @@ import { EnhancedMetadataModal } from './components/EnhancedMetadataModal';
 import { EnhancedReader } from './components/EnhancedReader';
 import { ReviewQueue } from './components/ReviewQueue';
 import { MultiFilterSidebar } from './components/MultiFilterSidebar'; // Added MultiFilterSidebar import
+import { subscribeToUserPapers, createPaperRecord, updatePaperRecord, deletePaperRecord } from './data/paperRepository';
+import { useToast } from './components/ToastProvider';
+import { FeatureFlagMenu } from './config/featureFlags';
 
 // Configure Worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -79,6 +81,7 @@ function App() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [user, loading] = useAuthState(auth);
+  const { addToast } = useToast();
   
   const [papers, setPapers] = useState([]);
   const [activeView, setActiveView] = useState('library'); 
@@ -123,33 +126,24 @@ function App() {
   const graphRef = useRef();
   const [readingStats, setReadingStats] = useState(null);
 
-  // --- NOTIFICATION STATE ---
-  const [toasts, setToasts] = useState([]); 
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: "", onConfirm: null });
-
-  const addToast = (message, type = 'info') => {
-    const id = Date.now() + Math.random();
-    setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
-  };
 
   // --- DATA & AUTH ---
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "papers"), where("userId", "==", user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setPapers(loaded);
-      
-      if (typeof calculateReadingStats === 'function') {
-        const stats = calculateReadingStats(loaded, []);
-        setReadingStats(stats);
-      }
-    });
+    const unsubscribe = subscribeToUserPapers(
+      user.uid,
+      (loaded) => {
+        setPapers(loaded);
+        if (typeof calculateReadingStats === 'function') {
+          const stats = calculateReadingStats(loaded, []);
+          setReadingStats(stats);
+        }
+      },
+      (message) => addToast(message, 'error')
+    );
     return () => unsubscribe();
-  }, [user]);
+  }, [addToast, user]);
 
   // Calculate due papers for review
   const duePapers = useMemo(() => getDuePapers(papers), [papers]);
@@ -263,32 +257,36 @@ function App() {
       const url = await getDownloadURL(fileRef);
       let thumbnailUrl = "";
       try { if (typeof generatePDFThumbnail === 'function') thumbnailUrl = await generatePDFThumbnail(url); } catch (e) {}
-      
-      await addDoc(collection(db, "papers"), {
-        userId: user.uid,
-        title: metadata.title,
-        link: "",
-        tags: metadata.tags,
-        color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
-        status: "to-read",
-        abstract: metadata.abstract,
-        authors: metadata.authors,
-        year: metadata.year,
-        venue: metadata.venue,
-        notes: "",
-        pdfUrl: url,
-        doi: metadata.doi || "",
-        citationCount: metadata.citationCount || 0,
-        pdfHash: metadata.pdfHash || "",
-        thumbnailUrl: thumbnailUrl,
-        createdAt: Date.now(),
-        addedDate: Date.now(),
-        rating: 0,
-        methods: [],
-        organisms: [],
-        hypotheses: [],
-        structuredNotes: {}
-      });
+      try {
+        await createPaperRecord({
+          userId: user.uid,
+          title: metadata.title,
+          link: "",
+          tags: metadata.tags,
+          color: COLORS[Math.floor(Math.random() * COLORS.length)].class,
+          status: "to-read",
+          abstract: metadata.abstract,
+          authors: metadata.authors,
+          year: metadata.year,
+          venue: metadata.venue,
+          notes: "",
+          pdfUrl: url,
+          doi: metadata.doi || "",
+          citationCount: metadata.citationCount || 0,
+          pdfHash: metadata.pdfHash || "",
+          thumbnailUrl: thumbnailUrl,
+          createdAt: Date.now(),
+          addedDate: Date.now(),
+          rating: 0,
+          methods: [],
+          organisms: [],
+          hypotheses: [],
+          structuredNotes: {}
+        });
+      } catch (error) {
+        console.error('Failed to save paper to Firestore', error);
+        addToast('Could not save paper. Please retry.', 'error');
+      }
   };
 
   const handleDrop = async (e) => {
@@ -337,35 +335,39 @@ function App() {
 
           const existingPaper = papers.find(p => p.title.toLowerCase().trim() === item.title.toLowerCase().trim());
 
-          if (existingPaper) {
-            // Update existing paper with date AND reading list
-            await updateDoc(doc(db, "papers", existingPaper.id), {
-              scheduledDate: item.date || item.scheduledDate,
-              readingList: planName, // <--- Assign to group
-              modifiedDate: Date.now()
-            });
-            updatedCount++;
-          } else {
-            // Create new paper with reading list
-            await addDoc(collection(db, "papers"), {
-              userId: user.uid,
-              title: item.title,
-              scheduledDate: item.date || item.scheduledDate,
-              readingList: planName, // <--- Assign to group
-              notes: item.notes || "",
-              status: "to-read",
-              color: COLORS[0].class,
-              tags: ["Planned"],
-              authors: "Unknown",
-              createdAt: Date.now(),
-              addedDate: Date.now(),
-              rating: 0,
-              methods: [],
-              organisms: [],
-              hypotheses: [],
-              structuredNotes: {}
-            });
-            createdCount++;
+          try {
+            if (existingPaper) {
+              await updatePaperRecord(existingPaper, {
+                scheduledDate: item.date || item.scheduledDate,
+                readingList: planName,
+                modifiedDate: Date.now()
+              });
+              updatedCount++;
+            } else {
+              await createPaperRecord({
+                userId: user.uid,
+                title: item.title,
+                scheduledDate: item.date || item.scheduledDate,
+                readingList: planName,
+                notes: item.notes || "",
+                status: "to-read",
+                color: COLORS[0].class,
+                tags: ["Planned"],
+                authors: "Unknown",
+                createdAt: Date.now(),
+                addedDate: Date.now(),
+                rating: 0,
+                methods: [],
+                organisms: [],
+                hypotheses: [],
+                structuredNotes: {},
+                addedByPlan: true
+              });
+              createdCount++;
+            }
+          } catch (error) {
+            console.error('Failed to import plan item', error);
+            addToast('Could not import one of the plan items. See console for details.', 'error');
           }
         }
         
@@ -418,8 +420,7 @@ function App() {
           yearString = citationData.publicationDate.split('-')[0];
         }
         
-        // Create paper with fetched metadata
-        await addDoc(collection(db, "papers"), {
+        await createPaperRecord({
           userId: user.uid,
           title: citationData.title || "Untitled Paper",
           authors: authorsString,
@@ -466,7 +467,7 @@ function App() {
       const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
       await uploadBytes(fileRef, file);
       const url = await getDownloadURL(fileRef);
-      await updateDoc(doc(db, "papers", paper.id), {
+      await updatePaperRecord(paper, {
         pdfUrl: url,
         modifiedDate: Date.now(),
       });
@@ -481,7 +482,7 @@ function App() {
       isOpen: true,
       message: "This will permanently delete the paper and all its annotations.",
       onConfirm: async () => {
-        await deleteDoc(doc(db, "papers", id));
+        await deletePaperRecord(id);
         addToast("Paper deleted", "info");
         setConfirmDialog({ isOpen: false, message: "", onConfirm: null });
       }
@@ -489,21 +490,22 @@ function App() {
   };
 
   const handleStatusChange = async (id, newStatus) => {
-    await updateDoc(doc(db, "papers", id), { status: newStatus });
+    const paper = papers.find(p => p.id === id);
+    if (!paper) return;
+
+    await updatePaperRecord(paper, { status: newStatus });
+    let updatedPaper = { ...paper, status: newStatus };
     
-    // Initialize SRS when paper moves to "read" status
-    if (newStatus === 'read') {
-      const paper = papers.find(p => p.id === id);
-      if (paper && !paper.srsDue) {
-        const srsState = initializeSRS();
-        await updateDoc(doc(db, "papers", id), {
-          srsRepetitions: srsState.repetitions,
-          srsInterval: srsState.interval,
-          srsEase: srsState.ease,
-          srsDue: srsState.due,
-        });
-        addToast("Paper added to review queue!", "success");
-      }
+    if (newStatus === 'read' && !paper.srsDue) {
+      const srsState = initializeSRS();
+      await updatePaperRecord(updatedPaper, {
+        srsRepetitions: srsState.repetitions,
+        srsInterval: srsState.interval,
+        srsEase: srsState.ease,
+        srsDue: srsState.due,
+      });
+      updatedPaper = { ...updatedPaper, ...srsState };
+      addToast("Paper added to review queue!", "success");
     }
   };
 
@@ -518,7 +520,7 @@ function App() {
 
     const next = sm2Review(prev, quality);
 
-    await updateDoc(doc(db, "papers", paper.id), {
+    await updatePaperRecord(paper, {
       srsRepetitions: next.repetitions,
       srsInterval: next.interval,
       srsEase: next.ease,
@@ -559,7 +561,8 @@ function App() {
   // Handler for updating paper data from EnhancedReader
   const handlePaperUpdate = async (data) => {
     if (!selectedPaper) return;
-    await updateDoc(doc(db, "papers", selectedPaper.id), {
+    const livePaper = papers.find(p => p.id === selectedPaper.id) || selectedPaper;
+    await updatePaperRecord(livePaper, {
       ...data,
       modifiedDate: Date.now()
     });
@@ -568,7 +571,7 @@ function App() {
   // Handler for importing related papers
   const handleImportPaper = async (newPaperData) => {
     if (!user) return;
-    await addDoc(collection(db, "papers"), {
+    await createPaperRecord({
       userId: user.uid,
       title: newPaperData.title,
       status: "to-read",
@@ -584,17 +587,6 @@ function App() {
 
   const SharedUI = () => (
     <>
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none">
-        {toasts.map(toast => (
-          <div key={toast.id} className={`pointer-events-auto flex items-center gap-3 p-4 bg-white border-4 border-black shadow-nb min-w-[300px] animate-in slide-in-from-right`}>
-            {toast.type === 'success' && <Check className="text-green-600" size={24} strokeWidth={3} />}
-            {toast.type === 'error' && <AlertCircle className="text-red-600" size={24} strokeWidth={3} />}
-            {toast.type === 'info' && <Info className="text-blue-600" size={24} strokeWidth={3} />}
-            {toast.type === 'warning' && <AlertCircle className="text-yellow-600" size={24} strokeWidth={3} />}
-            <p className="font-bold uppercase text-sm">{toast.message}</p>
-          </div>
-        ))}
-      </div>
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
            <div className="bg-white border-4 border-black shadow-nb p-8 max-w-md w-full text-center">
@@ -616,7 +608,7 @@ function App() {
             setEditingPaper(null);
           }}
           onSave={async (data) => {
-            await updateDoc(doc(db, "papers", editingPaper.id), {
+            await updatePaperRecord(editingPaper, {
               ...data,
               modifiedDate: Date.now()
             });
@@ -742,6 +734,7 @@ function App() {
             )}
           </button>
           <button onClick={() => setActiveView('analytics')} className="nb-button flex gap-2"><BarChart3 strokeWidth={3} /> Analytics</button>
+          <FeatureFlagMenu />
           <button onClick={logout} className="nb-button flex gap-2"><LogOut strokeWidth={3} /> Exit</button>
         </div>
       </header>

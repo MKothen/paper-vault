@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "npm run test:build && node --test \"build-tests/tests/**/*.js\"",
+    "test:build": "rm -rf build-tests && tsc -p tsconfig.test.json",
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
@@ -29,7 +31,8 @@
     "react-force-graph-2d": "^1.29.0",
     "react-pdf": "^10.2.0",
     "react-window": "^2.2.3",
-    "recharts": "^3.4.1"
+    "recharts": "^3.4.1",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
