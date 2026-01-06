@@ -1,47 +1,71 @@
-import React from 'react';
+import React from 'react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 
 type ErrorBoundaryState = {
-  hasError: boolean;
-  error?: Error;
-};
+  hasError: boolean
+  error?: Error
+}
 
-export class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false };
+type ErrorBoundaryProps = {
+  children: React.ReactNode
+  onReset?: () => void
+}
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
+export class ErrorBoundary extends React.Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props)
+    this.state = { hasError: false }
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Unhandled UI error', error, errorInfo);
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.error('Uncaught error', error, errorInfo)
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: undefined });
-  };
+    this.setState({ hasError: false, error: undefined })
+    this.props.onReset?.()
+  }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-nb-yellow flex items-center justify-center p-6">
-          <div className="bg-white border-4 border-black shadow-nb p-8 max-w-lg w-full text-center">
-            <h1 className="text-3xl font-black uppercase mb-3">Something went wrong</h1>
-            <p className="text-sm font-bold text-gray-700 mb-4">
-              {this.state.error?.message ?? 'The app hit an unexpected error.'}
+        <div className="min-h-screen flex items-center justify-center bg-nb-gray p-6">
+          <div className="bg-white border-4 border-black shadow-nb max-w-lg w-full p-8 text-center space-y-4">
+            <AlertTriangle className="w-12 h-12 mx-auto text-red-500" strokeWidth={3} />
+            <h1 className="text-3xl font-black uppercase">Something went wrong</h1>
+            <p className="text-sm text-gray-600">
+              {this.state.error?.message ??
+                'An unexpected error occurred. Please try again or reload the page.'}
             </p>
             <div className="flex gap-3 justify-center">
-              <button className="nb-button" onClick={this.handleReset}>
-                Try again
+              <button
+                type="button"
+                className="nb-button bg-white"
+                onClick={this.handleReset}
+              >
+                <RefreshCw className="inline-block mr-2" size={16} />
+                Try Again
               </button>
-              <button className="nb-button bg-red-500 text-white" onClick={() => window.location.reload()}>
+              <button
+                type="button"
+                className="nb-button bg-nb-orange"
+                onClick={() => window.location.reload()}
+              >
                 Reload
               </button>
             </div>
           </div>
         </div>
-      );
+      )
     }
 
-    return this.props.children;
+    return this.props.children
   }
 }

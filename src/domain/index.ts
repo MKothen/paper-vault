@@ -1,3 +1,1 @@
-export * from './paper';
-export * from './project';
-export * from './featureFlag';
+export * from './models/paper'

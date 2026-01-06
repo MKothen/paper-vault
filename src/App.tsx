@@ -7,11 +7,10 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
-  Sun, Moon, Timer, Clock, Check, ZoomIn, ZoomOut, FileUp, AlertCircle, 
-  Info, LayoutGrid, BarChart3, Download, FileText, Users, ChevronRight,
+  Sun, Moon, Timer, Clock, ZoomIn, ZoomOut, FileUp, 
+  LayoutGrid, BarChart3, Download, FileText, Users, ChevronRight,
   Brain, RefreshCw, Calendar, Upload
 } from 'lucide-react';
-import ForceGraph2D from 'react-force-graph-2d';
 
 // --- REACT-PDF IMPORTS ---
 import { pdfjs } from 'react-pdf';
@@ -42,9 +41,15 @@ import { EnhancedMetadataModal } from './components/EnhancedMetadataModal';
 import { EnhancedReader } from './components/EnhancedReader';
 import { ReviewQueue } from './components/ReviewQueue';
 import { MultiFilterSidebar } from './components/MultiFilterSidebar'; // Added MultiFilterSidebar import
-import { subscribeToUserPapers, createPaperRecord, updatePaperRecord, deletePaperRecord } from './data/paperRepository';
 import { useToast } from './components/ToastProvider';
-import { FeatureFlagMenu } from './config/featureFlags';
+import { FeatureFlagPanel } from './components/FeatureFlagPanel';
+import { useFeatureFlags } from './providers/FeatureFlagProvider';
+import {
+  createPaper as createPaperRecord,
+  listenToUserPapers,
+  removePaper as removePaperRecord,
+  updatePaper as updatePaperRecord,
+} from './data/papersRepository';
 
 // Configure Worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -78,6 +83,8 @@ const generateSmartTags = (text) => {
 };
 
 function App() {
+  const { addToast } = useToast();
+  const { flags } = useFeatureFlags();
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [user, loading] = useAuthState(auth);
@@ -122,28 +129,28 @@ function App() {
   // BibTeX Import State
   const [bibtexInput, setBibtexInput] = useState("");
   const [showBibtexModal, setShowBibtexModal] = useState(false);
-  
-  const graphRef = useRef();
   const [readingStats, setReadingStats] = useState(null);
 
+  // --- NOTIFICATION STATE ---
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: "", onConfirm: null });
 
   // --- DATA & AUTH ---
   useEffect(() => {
     if (!user) return;
-    const unsubscribe = subscribeToUserPapers(
+    const unsubscribe = listenToUserPapers(
       user.uid,
       (loaded) => {
         setPapers(loaded);
+        
         if (typeof calculateReadingStats === 'function') {
           const stats = calculateReadingStats(loaded, []);
           setReadingStats(stats);
         }
       },
-      (message) => addToast(message, 'error')
+      () => addToast('Sync error: could not load papers', 'error')
     );
     return () => unsubscribe();
-  }, [addToast, user]);
+  }, [user, addToast]);
 
   // Calculate due papers for review
   const duePapers = useMemo(() => getDuePapers(papers), [papers]);
@@ -247,19 +254,20 @@ function App() {
   };
 
   const processFile = async (file) => {
-      const metadata = await extractMetadata(file);
-      if (typeof findDuplicatePapers === 'function') {
-        const duplicates = findDuplicatePapers(metadata, papers);
-        if (duplicates.length > 0) addToast(`⚠️ Possible duplicate: "${duplicates[0].title}"`, "warning");
-      }
-      const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      let thumbnailUrl = "";
-      try { if (typeof generatePDFThumbnail === 'function') thumbnailUrl = await generatePDFThumbnail(url); } catch (e) {}
+      if (!user) return;
       try {
-        await createPaperRecord({
-          userId: user.uid,
+        const metadata = await extractMetadata(file);
+        if (typeof findDuplicatePapers === 'function') {
+          const duplicates = findDuplicatePapers(metadata, papers);
+          if (duplicates.length > 0) addToast(`⚠️ Possible duplicate: "${duplicates[0].title}"`, "warning");
+        }
+        const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
+        await uploadBytes(fileRef, file);
+        const url = await getDownloadURL(fileRef);
+        let thumbnailUrl = "";
+        try { if (typeof generatePDFThumbnail === 'function') thumbnailUrl = await generatePDFThumbnail(url); } catch (e) {}
+        
+        await createPaperRecord(user.uid, {
           title: metadata.title,
           link: "",
           tags: metadata.tags,
@@ -284,8 +292,8 @@ function App() {
           structuredNotes: {}
         });
       } catch (error) {
-        console.error('Failed to save paper to Firestore', error);
-        addToast('Could not save paper. Please retry.', 'error');
+        console.error('Failed to process file', error);
+        addToast('Upload failed. Please retry.', 'error');
       }
   };
 
@@ -335,39 +343,34 @@ function App() {
 
           const existingPaper = papers.find(p => p.title.toLowerCase().trim() === item.title.toLowerCase().trim());
 
-          try {
-            if (existingPaper) {
-              await updatePaperRecord(existingPaper, {
-                scheduledDate: item.date || item.scheduledDate,
-                readingList: planName,
-                modifiedDate: Date.now()
-              });
-              updatedCount++;
-            } else {
-              await createPaperRecord({
-                userId: user.uid,
-                title: item.title,
-                scheduledDate: item.date || item.scheduledDate,
-                readingList: planName,
-                notes: item.notes || "",
-                status: "to-read",
-                color: COLORS[0].class,
-                tags: ["Planned"],
-                authors: "Unknown",
-                createdAt: Date.now(),
-                addedDate: Date.now(),
-                rating: 0,
-                methods: [],
-                organisms: [],
-                hypotheses: [],
-                structuredNotes: {},
-                addedByPlan: true
-              });
-              createdCount++;
-            }
-          } catch (error) {
-            console.error('Failed to import plan item', error);
-            addToast('Could not import one of the plan items. See console for details.', 'error');
+          if (existingPaper) {
+            // Update existing paper with date AND reading list
+            await updatePaperRecord(existingPaper.id, {
+              scheduledDate: item.date || item.scheduledDate,
+              readingList: planName, // <--- Assign to group
+              modifiedDate: Date.now()
+            });
+            updatedCount++;
+          } else {
+            // Create new paper with reading list
+            await createPaperRecord(user.uid, {
+              title: item.title,
+              scheduledDate: item.date || item.scheduledDate,
+              readingList: planName, // <--- Assign to group
+              notes: item.notes || "",
+              status: "to-read",
+              color: COLORS[0].class,
+              tags: ["Planned"],
+              authors: "Unknown",
+              createdAt: Date.now(),
+              addedDate: Date.now(),
+              rating: 0,
+              methods: [],
+              organisms: [],
+              hypotheses: [],
+              structuredNotes: {}
+            });
+            createdCount++;
           }
         }
         
@@ -420,8 +423,8 @@ function App() {
           yearString = citationData.publicationDate.split('-')[0];
         }
         
-        await createPaperRecord({
-          userId: user.uid,
+        // Create paper with fetched metadata
+        await createPaperRecord(user.uid, {
           title: citationData.title || "Untitled Paper",
           authors: authorsString,
           abstract: citationData.abstract || "",
@@ -467,7 +470,7 @@ function App() {
       const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
       await uploadBytes(fileRef, file);
       const url = await getDownloadURL(fileRef);
-      await updatePaperRecord(paper, {
+      await updatePaperRecord(paper.id, {
         pdfUrl: url,
         modifiedDate: Date.now(),
       });
@@ -482,7 +485,7 @@ function App() {
       isOpen: true,
       message: "This will permanently delete the paper and all its annotations.",
       onConfirm: async () => {
-        await deletePaperRecord(id);
+        await removePaperRecord(id);
         addToast("Paper deleted", "info");
         setConfirmDialog({ isOpen: false, message: "", onConfirm: null });
       }
@@ -490,22 +493,21 @@ function App() {
   };
 
   const handleStatusChange = async (id, newStatus) => {
-    const paper = papers.find(p => p.id === id);
-    if (!paper) return;
-
-    await updatePaperRecord(paper, { status: newStatus });
-    let updatedPaper = { ...paper, status: newStatus };
+    await updatePaperRecord(id, { status: newStatus });
     
-    if (newStatus === 'read' && !paper.srsDue) {
-      const srsState = initializeSRS();
-      await updatePaperRecord(updatedPaper, {
-        srsRepetitions: srsState.repetitions,
-        srsInterval: srsState.interval,
-        srsEase: srsState.ease,
-        srsDue: srsState.due,
-      });
-      updatedPaper = { ...updatedPaper, ...srsState };
-      addToast("Paper added to review queue!", "success");
+    // Initialize SRS when paper moves to "read" status
+    if (newStatus === 'read') {
+      const paper = papers.find(p => p.id === id);
+      if (paper && !paper.srsDue) {
+        const srsState = initializeSRS();
+        await updatePaperRecord(id, {
+          srsRepetitions: srsState.repetitions,
+          srsInterval: srsState.interval,
+          srsEase: srsState.ease,
+          srsDue: srsState.due,
+        });
+        addToast("Paper added to review queue!", "success");
+      }
     }
   };
 
@@ -520,7 +522,7 @@ function App() {
 
     const next = sm2Review(prev, quality);
 
-    await updatePaperRecord(paper, {
+    await updatePaperRecord(paper.id, {
       srsRepetitions: next.repetitions,
       srsInterval: next.interval,
       srsEase: next.ease,
@@ -561,8 +563,7 @@ function App() {
   // Handler for updating paper data from EnhancedReader
   const handlePaperUpdate = async (data) => {
     if (!selectedPaper) return;
-    const livePaper = papers.find(p => p.id === selectedPaper.id) || selectedPaper;
-    await updatePaperRecord(livePaper, {
+    await updatePaperRecord(selectedPaper.id, {
       ...data,
       modifiedDate: Date.now()
     });
@@ -571,8 +572,7 @@ function App() {
   // Handler for importing related papers
   const handleImportPaper = async (newPaperData) => {
     if (!user) return;
-    await createPaperRecord({
-      userId: user.uid,
+    await createPaperRecord(user.uid, {
       title: newPaperData.title,
       status: "to-read",
       color: COLORS[0].class,
@@ -608,7 +608,7 @@ function App() {
             setEditingPaper(null);
           }}
           onSave={async (data) => {
-            await updatePaperRecord(editingPaper, {
+            await updatePaperRecord(editingPaper.id, {
               ...data,
               modifiedDate: Date.now()
             });
@@ -722,6 +722,11 @@ function App() {
       <header className="bg-white border-b-4 border-black p-5 flex justify-between items-center shadow-sm sticky top-0 z-30">
         <div className="flex items-center gap-3"><div className="bg-black text-white p-2"><BookOpen strokeWidth={3} size={32} /></div><h1 className="text-4xl font-black uppercase tracking-tighter">Paper Vault</h1><p className="text-sm font-bold text-gray-600 uppercase">by Maximilian Kothen</p></div>
         <div className="flex gap-4">
+          {(flags?.copilot || flags?.semanticSearch) && (
+            <div className="flex items-center gap-2 border-3 border-black bg-nb-yellow px-3 py-2 font-black uppercase text-xs shadow-nb">
+              <Wand2 strokeWidth={3} size={16} /> Labs On
+            </div>
+          )}
           <button 
             onClick={() => setActiveView('review')} 
             className="nb-button flex gap-2 relative"
@@ -803,14 +808,18 @@ function App() {
                   <p className="font-black text-xl uppercase flex items-center gap-2 justify-center">
                     <Upload size={24}/> Upload Reading Plan (JSON)
                   </p>
-                  <p className="text-sm text-gray-500">Auto-create papers from list with due dates & groups</p>
-               </div>
-               <input ref={planInputRef} type="file" accept=".json" className="hidden" onChange={handlePlanUpload} />
-            </div>
-         )}
+         <p className="text-sm text-gray-500">Auto-create papers from list with due dates & groups</p>
+       </div>
+       <input ref={planInputRef} type="file" accept=".json" className="hidden" onChange={handlePlanUpload} />
       </div>
+     )}
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="mt-4">
+        <FeatureFlagPanel />
+      </div>
+    </div>
+
+    <div className="flex flex-1 overflow-hidden">
         {/* Kanban Board Area */}
         <div className="flex-1 overflow-hidden flex flex-col">
           <VirtualKanbanBoard 
