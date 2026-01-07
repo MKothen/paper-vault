@@ -66,6 +66,7 @@ const paperFieldsSchema = z.object({
   citationStyle: z.string().optional(),
   fileSize: z.number().optional(),
   pageCount: z.number().optional(),
+  projectIds: z.array(z.string()).default([]),
 })
 
 export const paperSchema = paperFieldsSchema.extend({
