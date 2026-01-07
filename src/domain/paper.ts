@@ -136,6 +136,10 @@ export const PaperCreateSchema = PaperSchema.omit({ id: true }).extend({
 
 export type PaperModel = z.infer<typeof PaperSchema>;
 export type PaperCreate = z.infer<typeof PaperCreateSchema>;
+export type PaperCreateInput = PaperCreate;
+
+export const paperUpdateSchema = PaperSchema.partial();
+export type PaperUpdateInput = z.infer<typeof paperUpdateSchema>;
 
 export const defaultPaperFields: Pick<
   PaperModel,
