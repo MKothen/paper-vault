@@ -104,6 +104,7 @@ export const PaperSchema = z
     structuredNotes: structuredNotesSchema.optional().default({}),
     readingList: z.string().optional(),
     scheduledDate: z.string().optional(),
+    projectIds: z.array(z.string()).optional().default([]),
     srsRepetitions: z.number().optional(),
     srsInterval: z.number().optional(),
     srsEase: z.number().optional(),
@@ -154,6 +155,7 @@ export const defaultPaperFields: Pick<
   | 'structuredNotes'
   | 'addedDate'
   | 'createdAt'
+  | 'projectIds'
 > = {
   link: '',
   tags: [],
@@ -171,6 +173,7 @@ export const defaultPaperFields: Pick<
   structuredNotes: {},
   createdAt: Date.now(),
   addedDate: Date.now(),
+  projectIds: [],
 };
 
 export const normalizePaper = (data: unknown, id?: string): PaperModel => {

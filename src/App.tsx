@@ -1,9 +1,8 @@
 // src/App.tsx
 // @ts-nocheck
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { auth, signInWithGoogle, logout, storage } from './firebase';
+import { auth, signInWithGoogle, logout } from './firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   BookOpen, Trash2, Plus, LogOut, Loader2, Pencil, X, Search, 
   StickyNote, Wand2, Share2, User, Eye, Lock, Highlighter, ChevronLeft, 
@@ -50,9 +49,13 @@ import {
   removePaper as removePaperRecord,
   updatePaper as updatePaperRecord,
 } from './data/papersRepository';
+import { configurePdfWorker } from './utils/pdfWorker';
+import { createStorageProvider } from './services/storageProvider';
+import { ResearchOS } from './components/ResearchOS';
+import { createCaptureInboxItem } from './data/researchRepositories';
 
 // Configure Worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+configurePdfWorker();
 
 const APP_PASSWORD = "science-rocks";
 
@@ -88,7 +91,7 @@ function App() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [user, loading] = useAuthState(auth);
-  const { addToast } = useToast();
+  const storageProvider = useMemo(() => createStorageProvider(), []);
   
   const [papers, setPapers] = useState([]);
   const [activeView, setActiveView] = useState('library'); 
@@ -150,6 +153,36 @@ function App() {
       () => addToast('Sync error: could not load papers', 'error')
     );
     return () => unsubscribe();
+  }, [user, addToast]);
+
+  useEffect(() => {
+    if (!user) return;
+    const workerReady = pdfjs.GlobalWorkerOptions.workerSrc;
+    if (!workerReady) {
+      addToast('PDF worker not configured. Please ensure pdf.worker.min.mjs is available.', 'error');
+    }
+  }, [user, addToast]);
+
+  useEffect(() => {
+    if (!user) return;
+    const params = new URLSearchParams(window.location.search);
+    const captureUrl = params.get('capture');
+    const captureTitle = params.get('title') ?? undefined;
+    if (!captureUrl) return;
+
+    createCaptureInboxItem(user.uid, {
+      url: captureUrl,
+      title: captureTitle,
+      source: 'bookmarklet',
+    })
+      .then(() => addToast('Captured link added to inbox.', 'success'))
+      .catch(() => addToast('Failed to save capture.', 'error'))
+      .finally(() => {
+        params.delete('capture');
+        params.delete('title');
+        const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+        window.history.replaceState({}, document.title, newUrl);
+      });
   }, [user, addToast]);
 
   // Calculate due papers for review
@@ -261,11 +294,15 @@ function App() {
           const duplicates = findDuplicatePapers(metadata, papers);
           if (duplicates.length > 0) addToast(`⚠️ Possible duplicate: "${duplicates[0].title}"`, "warning");
         }
-        const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
-        const url = await getDownloadURL(fileRef);
+        const uploadResult = await storageProvider.uploadPdf(user.uid, file);
+        const url = uploadResult?.url ?? '';
+        if (!uploadResult) {
+          addToast('Storage disabled. Paper metadata saved without PDF.', 'warning');
+        }
         let thumbnailUrl = "";
-        try { if (typeof generatePDFThumbnail === 'function') thumbnailUrl = await generatePDFThumbnail(url); } catch (e) {}
+        if (url) {
+          try { if (typeof generatePDFThumbnail === 'function') thumbnailUrl = await generatePDFThumbnail(url); } catch (e) {}
+        }
         
         await createPaperRecord(user.uid, {
           title: metadata.title,
@@ -467,9 +504,12 @@ function App() {
     if (!user || !file) return;
     try {
       addToast('Uploading PDF...', 'info');
-      const fileRef = ref(storage, `papers/${user.uid}/${Date.now()}_${file.name}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
+      const uploadResult = await storageProvider.uploadPdf(user.uid, file);
+      if (!uploadResult) {
+        addToast('Storage disabled. PDF metadata saved without file.', 'warning');
+        return;
+      }
+      const { url } = uploadResult;
       await updatePaperRecord(paper.id, {
         pdfUrl: url,
         modifiedDate: Date.now(),
@@ -697,6 +737,19 @@ function App() {
     );
   }
 
+  if (activeView === 'research') {
+    return (
+      <>
+        <SharedUI />
+        <ResearchOS
+          userId={user.uid}
+          papers={papers}
+          onBack={() => setActiveView('library')}
+        />
+      </>
+    );
+  }
+
   // Use EnhancedReader for the reader view
   if (activeView === 'reader' && selectedPaper) {
     // FIX: ensure we pass the live paper object, not the stale 'selectedPaper'
@@ -739,6 +792,7 @@ function App() {
             )}
           </button>
           <button onClick={() => setActiveView('analytics')} className="nb-button flex gap-2"><BarChart3 strokeWidth={3} /> Analytics</button>
+          <button onClick={() => setActiveView('research')} className="nb-button flex gap-2"><LayoutGrid strokeWidth={3} /> Research OS</button>
           <FeatureFlagMenu />
           <button onClick={logout} className="nb-button flex gap-2"><LogOut strokeWidth={3} /> Exit</button>
         </div>

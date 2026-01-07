@@ -14,12 +14,14 @@ export const ProjectSchema = z.object({
   id: z.string(),
   name: z.string().min(1, "Project name is required"),
   description: z.string().optional(),
-  ownerId: z.string(),
-  members: z.record(ProjectMemberSchema), // uid -> Member
+  conceptIds: z.array(z.string()).default([]),
   paperIds: z.array(z.string()).default([]),
   createdAt: z.number(),
   updatedAt: z.number(),
   archived: z.boolean().default(false),
+  status: z.string().optional(),
+  milestones: z.array(z.string()).default([]),
+  collaborators: z.array(z.string()).default([]),
 });
 
 export type Project = z.infer<typeof ProjectSchema>;
@@ -28,6 +30,10 @@ export const CreateProjectSchema = ProjectSchema.pick({
   name: true,
   description: true,
 }).extend({
-    paperIds: z.array(z.string()).optional()
+    paperIds: z.array(z.string()).optional(),
+    conceptIds: z.array(z.string()).optional(),
+    status: z.string().optional(),
+    milestones: z.array(z.string()).optional(),
+    collaborators: z.array(z.string()).optional(),
 });
 export type CreateProjectDTO = z.infer<typeof CreateProjectSchema>;

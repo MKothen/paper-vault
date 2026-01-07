@@ -1,4 +1,5 @@
 import type { Paper, CitationData } from '../types';
+import { fetchSemanticScholarWithCache } from './semanticScholarClient';
 
 /**
  * Normalize DOI input to clean format
@@ -128,11 +129,8 @@ export async function fetchSemanticScholarData(
       url = `https://api.semanticscholar.org/graph/v1/paper/${identifierType}:${cleanIdentifier}?fields=${fields}`;
     }
 
-    const response = await fetch(url);
-    if (!response.ok) return null;
-
-    const data = await response.json();
-    return data;
+    const cacheKey = `${identifierType}:${identifier}`;
+    return await fetchSemanticScholarWithCache(cacheKey, url);
   } catch (error) {
     console.error('Error fetching Semantic Scholar data:', error);
     return null;

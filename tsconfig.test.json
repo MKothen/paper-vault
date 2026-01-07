@@ -10,6 +10,8 @@
   "include": [
     "src/domain/**/*",
     "src/config/featureFlags.tsx",
+    "src/utils/**/*",
+    "src/types.ts",
     "src/data/**/*",
     "tests/**/*"
   ]

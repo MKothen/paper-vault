@@ -107,6 +107,20 @@ A powerful, serverless research paper management system designed for researchers
 - **Auto-Save:** Never lose your annotations or notes
 - **Export Library:** Download entire library as JSON
 
+## 🧠 Computational Neuroscience Research OS
+
+PaperVault now includes a student-friendly Research OS workflow:
+
+- **Projects** as the primary workspace (papers, concepts, runs, protocols).
+- **Concept Browser** with typed concepts for navigation and filtering.
+- **Run Log** for simulations/analysis sessions with parameter sweeps.
+- **Protocols** with markdown bodies and checklists.
+- **Evidence Matrix** for structured paper extractions + comparisons.
+- **Export** to Markdown (Obsidian-ready), CSV, and BibTeX.
+- **Capture Inbox** bookmarklet for sending papers into your library.
+
+See `docs/schema.md` for the Firestore data model.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -137,7 +151,8 @@ npm run dev
 2. Enable Google Authentication
 3. Create Firestore Database
 4. Enable Firebase Storage
-5. Add your config to `src/firebase.ts`:
+5. Deploy Firestore rules from `firestore.rules`
+6. Add your config to `src/firebase.ts`:
 
 ```typescript
 const firebaseConfig = {
@@ -190,6 +205,22 @@ const firebaseConfig = {
 3. **Graph View:** Visual exploration
 4. **Timeline:** Browse by publication year
 5. **Analytics:** Find most-used tags
+
+### Research OS Workflow
+
+1. Open **Research OS** from the top navigation.
+2. Create a **Project** and anchor key **Concepts**.
+3. Log **Runs** for simulations or analyses (optionally via parameter sweeps).
+4. Add **Protocols** and **Datasets/Code** links per project.
+5. Capture **Paper Extractions** to populate the Evidence Matrix.
+6. Export summaries and reading lists from the **Export** tab.
+
+### Environment Variables
+
+Add to `.env` (see `.env.example`):
+
+- `VITE_STORAGE_PROVIDER` (`firebase` | `local` | `disabled`)
+- `VITE_APP_BASE_URL` (used for the capture bookmarklet)
 
 ## 🔧 Development
 
