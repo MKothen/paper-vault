@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ProjectSchema } from './entities';
 
 export const ProjectMemberRoleSchema = z.enum(['owner', 'editor', 'viewer']);
 export type ProjectMemberRole = z.infer<typeof ProjectMemberRoleSchema>;
@@ -10,21 +11,8 @@ export const ProjectMemberSchema = z.object({
 });
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>;
 
-export const ProjectSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1, "Project name is required"),
-  description: z.string().optional(),
-  conceptIds: z.array(z.string()).default([]),
-  paperIds: z.array(z.string()).default([]),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-  archived: z.boolean().default(false),
-  status: z.string().optional(),
-  milestones: z.array(z.string()).default([]),
-  collaborators: z.array(z.string()).default([]),
-});
-
-export type Project = z.infer<typeof ProjectSchema>;
+// ProjectSchema and Project are now imported from ./entities to avoid duplicate exports in index.ts
+// Re-exporting them here is not necessary as index.ts exports * from entities
 
 export const CreateProjectSchema = ProjectSchema.pick({
   name: true,
