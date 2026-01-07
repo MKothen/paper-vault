@@ -11,10 +11,5 @@ export default defineConfig({
   // FIX: This forces Vite to process react-window correctly for named imports
   optimizeDeps: {
     include: ['react-window']
-  },
-  test: {
-    globals: true,
-    environment: 'node',
-    include: ['tests/**/*.test.ts']
   }
 })
