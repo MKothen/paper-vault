@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import {
-  FeatureFlags,
   getInitialFeatureFlags,
   persistFeatureFlags,
 } from '../config/featureFlags'
+import type { FeatureFlags } from '../config/featureFlags'
 
 type FeatureFlagContextValue = {
   flags: FeatureFlags
