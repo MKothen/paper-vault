@@ -1,5 +1,14 @@
 import type { Paper } from '../types';
-import type { DatasetLink, PaperExtraction, Project, Protocol, Run } from '../domain';
+import type {
+  CodeSnippet,
+  DatasetLink,
+  EvidenceItem,
+  PaperExtraction,
+  Project,
+  Protocol,
+  Run,
+  SimulationRun,
+} from '../domain';
 import { generateBibTeX } from './citationUtils';
 
 export const downloadTextFile = (filename: string, content: string) => {
@@ -125,3 +134,155 @@ export const buildEvidenceMatrixMarkdown = (
 
 export const buildBibTeXExport = (papers: Paper[]) =>
   papers.map((paper) => generateBibTeX(paper)).join('\n\n');
+
+export const buildEvidenceItemsCsv = (papers: Paper[], evidenceItems: EvidenceItem[]) => {
+  const header = [
+    'Paper Title',
+    'Entity Type',
+    'Value',
+    'Unit',
+    'Condition',
+    'Region',
+    'Species',
+    'Technique',
+    'Notes',
+  ];
+
+  const rows = evidenceItems.map((item) => {
+    const paper = papers.find((p) => p.id === item.paperId);
+    const value = item.fields.value?.value ?? '';
+    const unit = item.fields.value?.unit ?? '';
+    return [
+      paper?.title ?? item.paperId,
+      item.entityType,
+      value.toString(),
+      unit,
+      item.fields.condition ?? '',
+      item.fields.region ?? '',
+      item.fields.species ?? '',
+      item.fields.technique ?? '',
+      item.fields.notes ?? '',
+    ].map((entry) => `"${entry.toString().replace(/"/g, '""')}"`);
+  });
+
+  return [header.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+type ObsidianExportInput = {
+  papers: Paper[];
+  evidenceItems: EvidenceItem[];
+  simulationRuns: SimulationRun[];
+  codeSnippets: CodeSnippet[];
+  ontologyLookup: Record<string, string>;
+};
+
+const buildHighlightMarkdown = (paper: Paper) => {
+  const highlights = paper.highlights ?? [];
+  if (!highlights.length) return '_No highlights yet._';
+  return highlights
+    .map((highlight) => `- (${highlight.category}) ${highlight.text}`)
+    .join('\n');
+};
+
+const buildObsidianFrontmatter = (paper: Paper, ontologyTags: string[]) => [
+  '---',
+  `title: "${paper.title.replace(/"/g, '\\"')}"`,
+  `authors: "${paper.authors ?? ''}"`,
+  `year: "${paper.year ?? ''}"`,
+  `doi: "${paper.doi ?? ''}"`,
+  `tags: [${paper.tags?.map((tag) => `"${tag}"`).join(', ') ?? ''}]`,
+  `ontologyTags: [${ontologyTags.map((tag) => `"${tag}"`).join(', ')}]`,
+  '---',
+  '',
+].join('\n');
+
+const buildObsidianPaper = (
+  paper: Paper,
+  evidenceItems: EvidenceItem[],
+  simulationRuns: SimulationRun[],
+  codeSnippets: CodeSnippet[],
+  ontologyLookup: Record<string, string>,
+) => {
+  const ontologyTags = (paper.ontologyTagIds ?? []).map((id) => ontologyLookup[id] ?? id);
+  const linkedEvidence = evidenceItems.filter((item) => item.paperId === paper.id);
+  const linkedRuns = simulationRuns.filter((run) => run.linkedPapers.includes(paper.id));
+  const linkedSnippets = codeSnippets.filter((snippet) => snippet.linkedPapers.includes(paper.id));
+
+  const section = (title: string, body: string[]) => [`## ${title}`, ...body, ''].join('\n');
+
+  const evidenceSection = linkedEvidence.length
+    ? linkedEvidence
+        .map((item) =>
+          `- [[Evidence-${item.id}]] ${item.entityType}: ${item.fields.value?.value ?? ''} ${item.fields.value?.unit ?? ''}`.trim(),
+        )
+        .join('\n')
+    : '_No evidence items yet._';
+
+  const runSection = linkedRuns.length
+    ? linkedRuns.map((run) => `- [[SimRun-${run.runLabel}]] (${run.modelId})`).join('\n')
+    : '_No linked simulation runs._';
+
+  const snippetSection = linkedSnippets.length
+    ? linkedSnippets.map((snippet) => `- ${snippet.title} (${snippet.language})`).join('\n')
+    : '_No linked snippets._';
+
+  return [
+    buildObsidianFrontmatter(paper, ontologyTags),
+    section('Abstract', [paper.abstract || '_No abstract._']),
+    section('Highlights', [buildHighlightMarkdown(paper)]),
+    section('Notes', [paper.notes || '_No notes yet._']),
+    section('Linked Simulation Runs', [runSection]),
+    section('Evidence Items', [evidenceSection]),
+    section('Code Snippets', [snippetSection]),
+  ].join('\n');
+};
+
+export const buildObsidianBundle = ({
+  papers,
+  evidenceItems,
+  simulationRuns,
+  codeSnippets,
+  ontologyLookup,
+}: ObsidianExportInput) => {
+  const sortedPapers = [...papers].sort((a, b) => a.title.localeCompare(b.title));
+  const files = sortedPapers.flatMap((paper) => {
+    const safeTitle = paper.title.replace(/[<>:"/\\\\|?*]/g, '').slice(0, 120) || paper.id;
+    const highlightsContent = [`# Highlights for [[${paper.title}]]`, '', buildHighlightMarkdown(paper)].join('\n');
+    return [
+      {
+        path: `${safeTitle}.md`,
+        content: buildObsidianPaper(paper, evidenceItems, simulationRuns, codeSnippets, ontologyLookup),
+      },
+      {
+        path: `Highlights/${safeTitle}-highlights.md`,
+        content: highlightsContent,
+      },
+    ];
+  });
+
+  const runFiles = [...simulationRuns].sort((a, b) => a.runLabel.localeCompare(b.runLabel)).map((run) => {
+    const linkedTitles = papers
+      .filter((paper) => run.linkedPapers.includes(paper.id))
+      .map((paper) => `- [[${paper.title}]]`)
+      .join('\n') || '_No linked papers._';
+    return {
+      path: `SimRun-${run.runLabel}.md`,
+      content: [`# Simulation Run: ${run.runLabel}`, '', '## Linked Papers', linkedTitles].join('\n'),
+    };
+  });
+
+  const evidenceFiles = [...evidenceItems].sort((a, b) => a.id.localeCompare(b.id)).map((item) => {
+    const paperTitle = papers.find((paper) => paper.id === item.paperId)?.title ?? item.paperId;
+    return {
+      path: `Evidence-${item.id}.md`,
+      content: [
+        `# Evidence Item ${item.id}`,
+        '',
+        `Paper: [[${paperTitle}]]`,
+        `Entity Type: ${item.entityType}`,
+        `Value: ${item.fields.value?.value ?? ''} ${item.fields.value?.unit ?? ''}`.trim(),
+      ].join('\n'),
+    };
+  });
+  return [...files, ...runFiles, ...evidenceFiles];
+};

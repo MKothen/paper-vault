@@ -108,6 +108,7 @@ export const PaperSchema = z
     readingList: z.string().optional(),
     scheduledDate: z.string().optional(),
     projectIds: z.array(z.string()).optional().default([]),
+    ontologyTagIds: z.array(z.string()).optional().default([]),
     srsRepetitions: z.number().optional(),
     srsInterval: z.number().optional(),
     srsEase: z.number().optional(),
@@ -163,6 +164,7 @@ export const defaultPaperFields: Pick<
   | 'addedDate'
   | 'createdAt'
   | 'projectIds'
+  | 'ontologyTagIds'
 > = {
   link: '',
   tags: [],
@@ -181,6 +183,7 @@ export const defaultPaperFields: Pick<
   createdAt: Date.now(),
   addedDate: Date.now(),
   projectIds: [],
+  ontologyTagIds: [],
 };
 
 export const normalizePaper = (data: unknown, id?: string): PaperModel => {

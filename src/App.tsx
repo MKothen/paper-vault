@@ -52,7 +52,7 @@ import {
 } from './data/papersRepository';
 import { configurePdfWorker } from './utils/pdfWorker';
 import { createStorageProvider } from './services/storageProvider';
-import { ResearchOS } from './components/ResearchOS';
+import { NeuroHub } from './components/NeuroHub';
 import { createCaptureInboxItem } from './data/researchRepositories';
 
 // Configure Worker
@@ -738,11 +738,11 @@ function App() {
     );
   }
 
-  if (activeView === 'research') {
+  if (activeView === 'neuro') {
     return (
       <>
         <SharedUI />
-        <ResearchOS
+        <NeuroHub
           userId={user.uid}
           papers={papers}
           onBack={() => setActiveView('library')}
@@ -756,7 +756,7 @@ function App() {
     // FIX: ensure we pass the live paper object, not the stale 'selectedPaper'
     const livePaper = papers.find(p => p.id === selectedPaper.id) || selectedPaper;
     
-    return (
+      return (
       <>
         <SharedUI />
         <EnhancedReader 
@@ -765,6 +765,7 @@ function App() {
           onUpdate={handlePaperUpdate}
           papers={papers}
           onImportPaper={handleImportPaper}
+          userId={user.uid}
         />
       </>
     );
@@ -793,7 +794,7 @@ function App() {
             )}
           </button>
           <button onClick={() => setActiveView('analytics')} className="nb-button flex gap-2"><BarChart3 strokeWidth={3} /> Analytics</button>
-          <button onClick={() => setActiveView('research')} className="nb-button flex gap-2"><LayoutGrid strokeWidth={3} /> Research OS</button>
+          <button onClick={() => setActiveView('neuro')} className="nb-button flex gap-2"><LayoutGrid strokeWidth={3} /> Neuro Hub</button>
           <FeatureFlagMenu />
           <button onClick={logout} className="nb-button flex gap-2"><LogOut strokeWidth={3} /> Exit</button>
         </div>

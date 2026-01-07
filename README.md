@@ -107,6 +107,18 @@ A powerful, serverless research paper management system designed for researchers
 - **Auto-Save:** Never lose your annotations or notes
 - **Export Library:** Download entire library as JSON
 
+## 🧠 Neuro Research Hub (Tier 1)
+
+PaperVault now includes a dedicated Neuro Research Hub for computational neuroscience workflows:
+
+- **Ontology tagging:** hierarchical brain regions, ion channels, plasticity, circuit motifs, models, and techniques.
+- **Simulation hub:** import JSON run logs + artifacts, track parameters, and link runs to papers/models.
+- **Structured evidence extraction:** ion channel kinetics, plasticity parameters, firing rates, and membrane constants with units.
+- **Obsidian export:** deterministic Markdown export per paper, plus highlights files.
+- **Code snippets:** searchable Python snippet library linked to papers and models.
+
+See `docs/Tier1.md` for schema details, setup, and workflow notes.
+
 ## 🧠 Computational Neuroscience Research OS
 
 PaperVault now includes a student-friendly Research OS workflow:
