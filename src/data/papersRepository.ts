@@ -10,12 +10,14 @@ import {
 } from 'firebase/firestore'
 import { db } from '../firebase'
 import {
-  PaperCreateInput,
-  PaperModel,
-  PaperUpdateInput,
   buildPaperForCreate,
   normalizePaper,
   paperUpdateSchema,
+} from '../domain'
+import type {
+  PaperCreateInput,
+  PaperModel,
+  PaperUpdateInput,
 } from '../domain'
 
 const papersCollection = collection(db, 'papers')
