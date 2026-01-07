@@ -23,7 +23,7 @@ const timestampNumber = z
 const looseString = z.coerce.string();
 
 const highlightSchema: z.ZodType<Highlight> = z.object({
-  id: z.string(),
+  id: looseString, // Allow numeric IDs
   page: z.number().int(),
   rects: z.array(
     z.object({
@@ -42,7 +42,7 @@ const highlightSchema: z.ZodType<Highlight> = z.object({
 });
 
 const postItSchema: z.ZodType<PostIt> = z.object({
-  id: z.string(),
+  id: looseString, // Allow numeric IDs
   page: z.number().int(),
   x: z.number(),
   y: z.number(),
@@ -67,7 +67,7 @@ const structuredNotesSchema: z.ZodType<StructuredNotes> = z.object({
 
 export const PaperSchema = z
   .object({
-    id: z.string().optional(),
+    id: looseString.optional(),
     userId: z.string(),
     title: z.string().min(1),
     link: z.string().optional().default(''),
