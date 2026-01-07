@@ -19,6 +19,9 @@ const timestampNumber = z
   .preprocess((value) => timestampToNumber(value), z.number().int())
   .catch(() => Date.now());
 
+// Helper for loose string conversion
+const looseString = z.coerce.string();
+
 const highlightSchema: z.ZodType<Highlight> = z.object({
   id: z.string(),
   page: z.number().int(),
@@ -73,7 +76,7 @@ export const PaperSchema = z
     status: z.enum(['to-read', 'reading', 'read']).default('to-read'),
     abstract: z.string().optional().default(''),
     authors: z.string().optional().default(''),
-    year: z.string().optional().default(new Date().getFullYear().toString()),
+    year: looseString.optional().default(new Date().getFullYear().toString()),
     venue: z.string().optional().default(''),
     notes: z.string().optional().default(''),
     pdfUrl: z.string().optional().default(''),
@@ -110,15 +113,15 @@ export const PaperSchema = z
     srsEase: z.number().optional(),
     srsDue: timestampNumber.optional(),
     journal: z.string().optional(),
-    volume: z.string().optional(),
-    issue: z.string().optional(),
-    pages: z.string().optional(),
+    volume: looseString.optional(),
+    issue: looseString.optional(),
+    pages: looseString.optional(),
     publisher: z.string().optional(),
     keywords: z.array(z.string()).optional(),
     language: z.string().optional(),
     issn: z.string().optional(),
-    pmid: z.string().optional(),
-    arxivId: z.string().optional(),
+    pmid: looseString.optional(),
+    arxivId: looseString.optional(),
     semanticScholarId: z.string().optional(),
     citationStyle: z.string().optional(),
     pdfHash: z.string().optional(),
@@ -187,7 +190,9 @@ export const normalizePaper = (data: unknown, id?: string): PaperModel => {
   });
 
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => issue.message).join(', ');
+    // Return partial valid data or throw more descriptive error
+    // For now, let's log and rethrow with specific details
+    const issues = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join(', ');
     throw new Error(`Invalid paper data${id ? ` for ${id}` : ''}: ${issues}`);
   }
 
