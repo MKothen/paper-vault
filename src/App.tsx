@@ -43,6 +43,7 @@ import { MultiFilterSidebar } from './components/MultiFilterSidebar'; // Added M
 import { useToast } from './components/ToastProvider';
 import { FeatureFlagPanel } from './components/FeatureFlagPanel';
 import { useFeatureFlags } from './providers/FeatureFlagProvider';
+import { FeatureFlagMenu } from './components/FeatureFlagMenu';
 import {
   createPaper as createPaperRecord,
   listenToUserPapers,
