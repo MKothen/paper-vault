@@ -24,15 +24,16 @@ export type UserProfile = z.infer<typeof UserProfileSchema>;
 // Projects are the top-level containers for research
 export const ProjectSchema = z.object({
   id: IDSchema,
-  ownerId: IDSchema,
-  title: z.string().min(1),
+  name: z.string().min(1),
   description: z.string().optional(),
+  conceptIds: z.array(IDSchema).default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
+  status: z.string().optional(),
+  milestones: z.array(z.string()).default([]),
+  collaborators: z.array(z.string()).default([]),
   archived: z.boolean().default(false),
-  tags: z.array(z.string()).default([]),
-  // Members for collaboration (future proofing)
-  members: z.record(z.enum(['owner', 'editor', 'viewer'])).default({}),
+  paperIds: z.array(IDSchema).default([]),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 

@@ -1,4 +1,5 @@
 import type { CitationData } from '../types';
+import { fetchWithRetry } from './http';
 
 const SEMANTIC_SCHOLAR_API = 'https://api.semanticscholar.org/graph/v1';
 const SEMANTIC_SCHOLAR_RECOMMENDATIONS_API = 'https://api.semanticscholar.org/recommendations/v1';
@@ -6,7 +7,9 @@ const SEMANTIC_SCHOLAR_RECOMMENDATIONS_API = 'https://api.semanticscholar.org/re
 export async function fetchCitationData(doi: string): Promise<CitationData | null> {
   try {
     const cleanDoi = doi.replace(/^DOI:/i, '');
-    const response = await fetch(`${SEMANTIC_SCHOLAR_API}/paper/DOI:${cleanDoi}?fields=paperId,externalIds,title,citationCount,references,citations`);
+    const response = await fetchWithRetry(
+      `${SEMANTIC_SCHOLAR_API}/paper/DOI:${cleanDoi}?fields=paperId,externalIds,title,citationCount,references,citations`,
+    );
     if (!response.ok) return null;
     return await response.json();
   } catch (error) {
@@ -28,7 +31,7 @@ export async function fetchCitationsWithMetadata(paperId: string, limit: number 
       'citingPaper.citationCount'
     ].join(',');
     const url = `${SEMANTIC_SCHOLAR_API}/paper/${paperId}/citations?fields=${fields}&limit=${limit}`;
-    const response = await fetch(url);
+    const response = await fetchWithRetry(url);
     if (!response.ok) {
       console.error('Semantic Scholar API error:', response.status, response.statusText, url);
       return [];
@@ -53,7 +56,7 @@ export async function fetchRecommendedPapers(
     const fields = 'paperId,title,authors,year,venue,citationCount';
     const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers/forpaper/${paperId}?fields=${fields}&limit=${limit}`;
     
-    const response = await fetch(url);
+    const response = await fetchWithRetry(url);
     if (!response.ok) {
       console.error('Recommendations API error:', response.status, response.statusText, url);
       return [];
@@ -76,7 +79,7 @@ export async function fetchRecommendedPapersMultiple(
     const fields = 'paperId,title,authors,year,venue,citationCount';
     const url = `${SEMANTIC_SCHOLAR_RECOMMENDATIONS_API}/papers?fields=${fields}&limit=${limit}`;
     
-    const response = await fetch(url, {
+    const response = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -102,7 +105,7 @@ export async function fetchRecommendedPapersMultiple(
 
 export async function searchSemanticScholar(query: string, limit: number = 10) {
   try {
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `${SEMANTIC_SCHOLAR_API}/paper/search?query=${encodeURIComponent(query)}&fields=paperId,title,authors,year,abstract,citationCount&limit=${limit}`
     );
     if (!response.ok) return [];
@@ -116,7 +119,7 @@ export async function searchSemanticScholar(query: string, limit: number = 10) {
 
 export async function fetchPaperByTitle(title: string) {
   try {
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `${SEMANTIC_SCHOLAR_API}/paper/search?query=${encodeURIComponent(title)}&fields=paperId,externalIds,title,citationCount,references,citations&limit=1`
     );
     if (!response.ok) return null;

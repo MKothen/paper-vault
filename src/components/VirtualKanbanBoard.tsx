@@ -96,26 +96,31 @@ const KanbanColumn = ({ id, title, items, onRead, onEdit, onDelete, onUploadPdf 
             {...provided.droppableProps}
             className="flex-1 overflow-y-auto p-2 gap-2 flex flex-col"
           >
-            {items.map((paper: Paper, idx: number) => (
-              <Draggable key={paper.id} draggableId={paper.id} index={idx}>
-                {(provided, snapshot) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.draggableProps}
-                    {...provided.dragHandleProps}
-                    className="mb-3"
-                  >
-                    <PaperCard
-                      paper={paper}
-                      onRead={onRead}
-                      onEdit={onEdit}
-                      onDelete={onDelete}
-                      onUploadPdf={onUploadPdf}
-                    />
-                  </div>
-                )}
-              </Draggable>
-            ))}
+            {items.map((paper: Paper, idx: number) => {
+              // Ensure draggableId is a string, even if paper.id is undefined
+              const draggableId = paper.id ? String(paper.id) : `paper-${idx}`;
+              
+              return (
+                <Draggable key={draggableId} draggableId={draggableId} index={idx}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                      className="mb-3"
+                    >
+                      <PaperCard
+                        paper={paper}
+                        onRead={onRead}
+                        onEdit={onEdit}
+                        onDelete={onDelete}
+                        onUploadPdf={onUploadPdf}
+                      />
+                    </div>
+                  )}
+                </Draggable>
+              );
+            })}
             {provided.placeholder}
           </div>
         </div>

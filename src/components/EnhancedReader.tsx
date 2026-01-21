@@ -1,10 +1,10 @@
 // src/components/EnhancedReader.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Document, Page } from 'react-pdf';
 import type { Paper, Highlight, PostIt } from '../types';
 import { 
   ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Highlighter, StickyNote, 
-  X, Book, List, Wand2, Network, FileText, Cloud
+  X, Book, List, Wand2, Network, FileText, Cloud, Brain
 } from 'lucide-react';
 import { TableOfContents } from './TableOfContents';
 import { FullTextSearch } from './FullTextSearch';
@@ -25,6 +25,17 @@ import {
   clearLocalPostIts,
   getCategoryColor
 } from '../utils/highlightUtils';
+import type { EvidenceItem, OntologyNode, SimulationModel, SimulationRun } from '../domain';
+import {
+  createMethodsSnippet,
+  createQuoteItem,
+  listenToUserEvidenceItems,
+  listenToUserOntologyNodes,
+  listenToUserSimulationModels,
+  listenToUserSimulationRuns,
+} from '../data/neuroRepositories';
+import { OntologyTagPicker } from './OntologyTagPicker';
+import { useToast } from './ToastProvider';
 
 interface Props {
   paper: Paper;
@@ -32,10 +43,11 @@ interface Props {
   onUpdate: (data: Partial<Paper>) => void;
   papers: Paper[];
   onImportPaper?: (paperData: any) => void;
+  userId: string;
 }
 
 type Mode = 'read' | 'highlight' | 'note';
-type SidebarTab = 'toc' | 'notes' | 'annotations' | 'ai' | 'related';
+type SidebarTab = 'toc' | 'notes' | 'annotations' | 'ai' | 'related' | 'neuro';
 
 // Simple debounce hook to prevent excessive writes
 function useDebounce<T>(value: T, delay: number): T {
@@ -49,7 +61,8 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper }: Props) {
+export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper, userId }: Props) {
+  const { addToast } = useToast();
   // PDF state
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
@@ -133,6 +146,42 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('annotations');
   const [activeCategory, setActiveCategory] = useState<Highlight['category']>('general');
   const [showSidebar, setShowSidebar] = useState(true);
+
+  const [ontologyNodes, setOntologyNodes] = useState<OntologyNode[]>([]);
+  const [simulationRuns, setSimulationRuns] = useState<SimulationRun[]>([]);
+  const [simulationModels, setSimulationModels] = useState<SimulationModel[]>([]);
+  const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
+  const [quoteDraft, setQuoteDraft] = useState('');
+  const [methodsDraft, setMethodsDraft] = useState('');
+
+  useEffect(() => {
+    if (!userId) return;
+    const unsubOntology = listenToUserOntologyNodes(userId, setOntologyNodes);
+    const unsubRuns = listenToUserSimulationRuns(userId, setSimulationRuns);
+    const unsubModels = listenToUserSimulationModels(userId, setSimulationModels);
+    const unsubEvidence = listenToUserEvidenceItems(userId, setEvidenceItems);
+    return () => {
+      unsubOntology();
+      unsubRuns();
+      unsubModels();
+      unsubEvidence();
+    };
+  }, [userId]);
+
+  const modelLookup = useMemo(
+    () => new Map(simulationModels.map((model) => [model.id, model.name])),
+    [simulationModels],
+  );
+
+  const linkedRuns = useMemo(
+    () => simulationRuns.filter((run) => run.linkedPapers.includes(paper.id)),
+    [paper.id, simulationRuns],
+  );
+
+  const linkedEvidence = useMemo(
+    () => evidenceItems.filter((item) => item.paperId === paper.id),
+    [paper.id, evidenceItems],
+  );
   
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -198,6 +247,38 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
     const newPostIt = createPostIt(x, y, pageNumber, scale);
     setPostits([...postits, newPostIt]);
     setMode('read');
+  };
+
+  const handleSaveQuote = async () => {
+    if (!quoteDraft.trim()) return;
+    try {
+      await createQuoteItem(userId, {
+        paperId: paper.id,
+        quote: quoteDraft.trim(),
+        tags: [],
+      });
+      setQuoteDraft('');
+      addToast('Quote saved to quote bank.', 'success');
+    } catch (error) {
+      console.error(error);
+      addToast('Failed to save quote.', 'error');
+    }
+  };
+
+  const handleSaveMethodsSnippet = async () => {
+    if (!methodsDraft.trim()) return;
+    try {
+      await createMethodsSnippet(userId, {
+        title: `${paper.title} methods`,
+        bodyMd: methodsDraft.trim(),
+        linkedPapers: [paper.id],
+      });
+      setMethodsDraft('');
+      addToast('Methods snippet saved.', 'success');
+    } catch (error) {
+      console.error(error);
+      addToast('Failed to save methods snippet.', 'error');
+    }
   };
 
   // Full-text search handler
@@ -533,6 +614,15 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
               <Network size={14} className="inline mr-1" />
               Related
             </button>
+            <button 
+              onClick={() => setSidebarTab('neuro')} 
+              className={`flex-1 p-2 font-bold uppercase text-xs transition-colors ${
+                sidebarTab === 'neuro' ? 'bg-nb-cyan' : 'hover:bg-gray-100'
+              }`}
+            >
+              <Brain size={14} className="inline mr-1" />
+              Neuro
+            </button>
           </div>
           <div className="flex-1 overflow-hidden">
             {sidebarTab === 'annotations' && (
@@ -577,6 +667,78 @@ export function EnhancedReader({ paper, onClose, onUpdate, papers, onImportPaper
             )}
             {sidebarTab === 'related' && (
               <RelatedWorkFinder paper={paper} papers={papers} onImportPaper={onImportPaper} />
+            )}
+            {sidebarTab === 'neuro' && (
+              <div className="p-4 space-y-4 overflow-y-auto h-full">
+                <h3 className="font-black uppercase">Ontology Tags</h3>
+                <OntologyTagPicker
+                  nodes={ontologyNodes}
+                  selectedIds={paper.ontologyTagIds ?? []}
+                  onChange={(next) => onUpdate({ ontologyTagIds: next })}
+                />
+
+                <div>
+                  <h4 className="font-black uppercase mb-2">Linked Simulation Runs</h4>
+                  {linkedRuns.length ? (
+                    <ul className="space-y-2 text-sm">
+                      {linkedRuns.map((run) => (
+                        <li key={run.id} className="border-2 border-black p-2">
+                          <div className="font-bold">{run.runLabel}</div>
+                          <div className="text-xs text-gray-600">{modelLookup.get(run.modelId) ?? run.modelId}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-gray-500">No linked simulation runs yet.</p>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="font-black uppercase mb-2">Linked Evidence Items</h4>
+                  {linkedEvidence.length ? (
+                    <ul className="space-y-2 text-sm">
+                      {linkedEvidence.map((item) => (
+                        <li key={item.id} className="border-2 border-black p-2">
+                          <div className="font-bold">{item.entityType}</div>
+                          <div className="text-xs text-gray-600">
+                            {item.fields.value?.value ?? ''} {item.fields.value?.unit ?? ''}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-gray-500">No linked evidence items yet.</p>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-black uppercase">Quick Actions</h4>
+                  <div>
+                    <label className="text-xs font-bold uppercase block mb-1">Quote Bank Entry</label>
+                    <textarea
+                      className="nb-input text-sm w-full border-2 border-black p-2 min-h-[80px] resize-y"
+                      placeholder="Paste a quote to save..."
+                      value={quoteDraft}
+                      onChange={(event) => setQuoteDraft(event.target.value)}
+                    />
+                    <button onClick={handleSaveQuote} className="nb-button mt-2">
+                      Save Quote
+                    </button>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase block mb-1">Methods Snippet</label>
+                    <textarea
+                      className="nb-input text-sm w-full border-2 border-black p-2 min-h-[80px] resize-y"
+                      placeholder="Capture reusable methods text..."
+                      value={methodsDraft}
+                      onChange={(event) => setMethodsDraft(event.target.value)}
+                    />
+                    <button onClick={handleSaveMethodsSnippet} className="nb-button mt-2">
+                      Save Methods Snippet
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>

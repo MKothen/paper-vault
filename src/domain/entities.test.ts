@@ -6,14 +6,13 @@ describe('Domain Entities', () => {
         it('should validate a valid project', () => {
             const validProject = {
                 id: 'proj_123',
-                ownerId: 'user_456',
-                title: 'My Thesis',
+                name: 'My Thesis',
                 description: 'A study on magnets',
+                conceptIds: [],
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
                 archived: false,
-                tags: ['thesis', 'urgent'],
-                members: { owner: 'user_456' }
+                paperIds: [],
             };
             
             const result = ProjectSchema.safeParse(validProject);
@@ -23,8 +22,7 @@ describe('Domain Entities', () => {
         it('should fail if title is missing', () => {
             const invalidProject = {
                 id: 'proj_123',
-                ownerId: 'user_456',
-                // title missing
+                // name missing
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
             };

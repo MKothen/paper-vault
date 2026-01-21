@@ -34,6 +34,8 @@ export interface Paper {
   readingList?: string; // e.g. "Master Thesis Prep"
   // NEW: Reading Timeline
   scheduledDate?: string; // YYYY-MM-DD format for timeline view
+  projectIds?: string[];
+  ontologyTagIds?: string[];
 
   // Spaced Repetition System fields
   srsRepetitions?: number; // Number of successful reviews in a row
