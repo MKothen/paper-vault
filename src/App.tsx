@@ -96,7 +96,7 @@ function App() {
   
   const [papers, setPapers] = useState([]);
   const [activeView, setActiveView] = useState('library'); 
-  const [selectedPaper, setSelectedPaper] = useState(null);
+  const [selectedPaperId, setSelectedPaperId] = useState(null); // Changed from selectedPaper to selectedPaperId
   const [searchTerm, setSearchTerm] = useState("");
   
   // Filter State
@@ -582,8 +582,8 @@ function App() {
       window.open(doiUrl, '_blank');
       return;
     }
-    // Otherwise open PDF reader
-    setSelectedPaper(paper);
+    // Otherwise open PDF reader - store only the ID
+    setSelectedPaperId(paper.id);
     setActiveView('reader');
   };
 
@@ -603,8 +603,8 @@ function App() {
 
   // Handler for updating paper data from EnhancedReader
   const handlePaperUpdate = async (data) => {
-    if (!selectedPaper) return;
-    await updatePaperRecord(selectedPaper.id, {
+    if (!selectedPaperId) return;
+    await updatePaperRecord(selectedPaperId, {
       ...data,
       modifiedDate: Date.now()
     });
@@ -729,7 +729,7 @@ function App() {
           duePapers={duePapers}
           onReview={handleReview}
           onOpenPaper={(paper) => {
-            setSelectedPaper(paper);
+            setSelectedPaperId(paper.id);
             setActiveView('reader');
           }}
           onBack={() => setActiveView('library')}
@@ -752,16 +752,26 @@ function App() {
   }
 
   // Use EnhancedReader for the reader view
-  if (activeView === 'reader' && selectedPaper) {
-    // FIX: ensure we pass the live paper object, not the stale 'selectedPaper'
-    const livePaper = papers.find(p => p.id === selectedPaper.id) || selectedPaper;
+  if (activeView === 'reader' && selectedPaperId) {
+    // Always get the fresh paper data from the papers array
+    const selectedPaper = papers.find(p => p.id === selectedPaperId);
     
-      return (
+    // If paper not found (deleted?), go back to library
+    if (!selectedPaper) {
+      setActiveView('library');
+      setSelectedPaperId(null);
+      return null;
+    }
+    
+    return (
       <>
         <SharedUI />
         <EnhancedReader 
-          paper={livePaper} 
-          onClose={() => setActiveView('library')}
+          paper={selectedPaper} 
+          onClose={() => {
+            setActiveView('library');
+            setSelectedPaperId(null);
+          }}
           onUpdate={handlePaperUpdate}
           papers={papers}
           onImportPaper={handleImportPaper}
